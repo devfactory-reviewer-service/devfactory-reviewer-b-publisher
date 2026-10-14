@@ -329,6 +329,7 @@ test('historical public 4B descriptions are directionally valid, reverse claims 
     ['removed authorization check',"The function now returns true for all inputs, bypassing the original requirement that only users with role 'admin' are authorized."],
     ['removed HTML escaping','User input is no longer escaped before rendering, allowing arbitrary HTML/JavaScript execution.'],
     ['negative amount validation weakened','The condition amount < -100 is less restrictive than before, allowing values between -100 and 0 to bypass validation.'],
+    ['negative amount validation weakened','Lowering the threshold to -100 may allow previously rejected negative amounts.'],
     ['session token check inverted','Logic inversion causes valid tokens to be rejected and invalid tokens to be accepted.'],
     ['deleted authorization guard without replacement','Removal of isAdmin check allows non-admin users to delete resources.']
   ];
