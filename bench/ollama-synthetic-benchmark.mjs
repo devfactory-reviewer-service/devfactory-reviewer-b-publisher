@@ -42,7 +42,7 @@ const FIXTURES=Object.freeze([
     before:"if (amount < 0) throw new Error('invalid');",
     source:"if (amount < -100) throw new Error('invalid');",
     knownStaticBlocker:false,knownSemanticBug:true,
-    oraclePattern:/(?:allow(?:s|ed|ing)? negative|accept(?:s|ed|ing)? negative|negative (?:amounts?|values?) (?:are |were |can be |now )?(?:now )?(?:accepted|allowed)|negative.{0,35}not rejected|allow(?:s|ed|ing)?.{0,60}(?:negative values?|values between -100 and 0).{0,45}bypass validation)/i}),
+    oraclePattern:/(?:allow(?:s|ed|ing)? (?:previously (?:rejected|invalid) )?negative|accept(?:s|ed|ing)? negative|negative (?:amounts?|values?) (?:are |were |can be |now )?(?:now )?(?:accepted|allowed)|negative.{0,35}not rejected|allow(?:s|ed|ing)?.{0,60}(?:negative values?|values between -100 and 0).{0,45}bypass validation)/i}),
   Object.freeze({label:'session token check inverted',path:'src/session-synthetic.mjs',
     before:'if (token !== session.token) return false;',
     source:'if (token === session.token) return false;',
