@@ -84,8 +84,7 @@ export async function executeLocalOllamaReview({
       'ECONNRESET','ECONNREFUSED','EPIPE','UND_ERR_SOCKET',
       'UND_ERR_HEADERS_TIMEOUT','UND_ERR_BODY_TIMEOUT'
     ]);
-    if(error instanceof TypeError
-      && localTransportCodes.has(error?.cause?.code))
+    if(localTransportCodes.has(error?.cause?.code))
       deny('LOCAL_MODEL_TRANSPORT_INTERRUPTED');
     deny('LOCAL_MODEL_REQUEST_FAILED');
   }

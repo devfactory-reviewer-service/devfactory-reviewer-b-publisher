@@ -187,6 +187,10 @@ test('known Ollama loopback disconnects have a safe, bounded diagnostic',async()
    &&!e.message.includes(sensitive)&&!e.message.includes(code));
  }
  await assert.rejects(()=>executeLocalOllamaReview(ctx({
-  fetchImpl:async()=>{throw new TypeError(sensitive,{cause:{code:'UNKNOWN'}});}
+  fetchImpl:async()=>{throw new Error(sensitive,{cause:{code:'ECONNRESET'}});}
+ })),e=>e.message==='LOCAL_MODEL_TRANSPORT_INTERRUPTED'
+    &&!e.message.includes(sensitive));
+ await assert.rejects(()=>executeLocalOllamaReview(ctx({
+  fetchImpl:async()=>{throw new Error(sensitive,{cause:{code:'UNKNOWN'}});}
  })),e=>e.message==='LOCAL_MODEL_REQUEST_FAILED');
 });
