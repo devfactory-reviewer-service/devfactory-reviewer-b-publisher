@@ -156,6 +156,10 @@ export function prepareOfflineOllamaCandidate({
     '\nFor threshold comparisons, test a boundary input admitted AFTER but rejected BEFORE; do not reverse the direction of the change.'+
     '\nTreat reduced GitHub permissions, additional null guards, defensive clamps and immutable objects as safe by default absent explicit failing requirements in this diff.'+
     '\nMissing context is not evidence of failure; never invent callers, invariants, or runtime mutations to justify a warning.'+
+    (model==='qwen3.5:4b'?
+      '\nFINAL REGRESSION PROOF CHECK: for every proposed finding, identify a specific input and show the BEFORE and AFTER outcomes from the provided changed lines; hypothetical callers are never evidence.'+
+      '\nA new null-safe access on an equality-to-admin role check cannot grant authorization to a missing user; do not claim bypass without a changed path producing true for that user.'+
+      '\nAn immutable object is not itself a proven regression; without a concrete existing mutation or failing caller visible in this diff, do not invent one.': '')+
     '\nIf no reproducible regression is supported by the diff, return an empty findings array.';
   const declarationSummary=verifiedDiffDeclarationSummary({
     index:trustedDeclarationIndex,plan,
