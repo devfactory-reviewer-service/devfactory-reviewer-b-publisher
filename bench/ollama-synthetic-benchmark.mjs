@@ -266,7 +266,7 @@ if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
   try {
     if(process.argv.length>3 ||
       (process.argv[2] &&
-        !['--small-synthetic','--large-synthetic','--qwen3-synthetic','--qwen35-synthetic','--coder-30b-synthetic'].includes(process.argv[2])))
+        !['--small-synthetic','--large-synthetic','--qwen3-synthetic','--qwen35-synthetic','--qwen35-9b-synthetic','--coder-30b-synthetic'].includes(process.argv[2])))
       deny('OLLAMA_BENCHMARK_UNSUPPORTED_ARGUMENT');
     const model=process.argv[2]==='--small-synthetic'?
       'qwen2.5-coder:1.5b':
@@ -274,6 +274,7 @@ if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
       'qwen2.5-coder:14b':
       process.argv[2]==='--qwen3-synthetic'? 'qwen3:8b':
       process.argv[2]==='--qwen35-synthetic'? 'qwen3.5:4b':
+      process.argv[2]==='--qwen35-9b-synthetic'? 'qwen3.5:9b':
       process.argv[2]==='--coder-30b-synthetic'? 'qwen3-coder:30b':'qwen2.5-coder:7b';
     const summary=await runSyntheticLocalOllamaBenchmark({model});
     process.stdout.write(JSON.stringify(summary)+'\n');
