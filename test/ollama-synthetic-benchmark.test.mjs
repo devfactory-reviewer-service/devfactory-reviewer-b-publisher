@@ -248,11 +248,12 @@ test('opt-in Qwen3 CI must run only synthetic cases with no privileged permissio
 test('opt-in Qwen3-only benchmark selects only 8B model while preserving full comparison label',()=>{
  const y=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',import.meta.url),'utf8');
  const options=[...y.matchAll(/'(\[\{"model":.*?\}\])'/g)].map(x=>JSON.parse(x[1]));
- assert.equal(options.length,4);
+ assert.equal(options.length,5);
  assert.deepEqual(options[0],[{model:'qwen2.5-coder:7b',cli_arg:''}]);
  assert.deepEqual(options[1],[{model:'qwen3:8b',cli_arg:'--qwen3-synthetic'}]);
  assert.deepEqual(options[2],[{model:'qwen3.5:4b',cli_arg:'--qwen35-synthetic'}]);
- assert.deepEqual(options[3].map(x=>x.model),
+ assert.deepEqual(options[3],[{model:'qwen3.5:9b',cli_arg:'--qwen35-9b-synthetic'}]);
+ assert.deepEqual(options[4].map(x=>x.model),
   ['qwen2.5-coder:7b','qwen2.5-coder:14b','qwen3:8b']);
  assert.match(y,/reviewer-b-benchmark-qwen35/);
  assert.match(y,/--qwen35-synthetic/);
@@ -353,4 +354,29 @@ test('historical public 4B descriptions are directionally valid, reverse claims 
   });
   assert.equal(gate.syntheticQualityGatePassed,false);
   assert.equal(gate.approvalAuthorized,false);
+});
+
+test('experimental Qwen 3.5 9B stays PUBLIC synthetic-only and strict fail-closed',async()=>{
+ const f=mock({model:'qwen3.5:9b'});
+ const result=await runSyntheticLocalOllamaBenchmark({fetchImpl:f.fetchImpl,model:'qwen3.5:9b'});
+ assert.equal(result.model,'qwen3.5:9b');
+ assert.equal(result.testsCompleted,12);
+ assert.equal(result.modelQualityCertified,false);
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.privateSourceReviewed,false);
+ assert.equal(result.independentReviewerProvenanceVerified,false);
+ assert.equal(f.calls.length,12);
+ for(const call of f.calls){
+   const request=JSON.parse(call.config.body);
+   assert.equal(request.model,'qwen3.5:9b');
+   assert.equal(request.think,false);
+   assert.equal(request.options.num_ctx,8192);
+   assert.equal(request.keep_alive,'5m');
+   assert.equal(call.url,ENDPOINT);
+ }
+ const yaml=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',import.meta.url),'utf8');
+ assert.match(yaml,/reviewer-b-benchmark-qwen35-9b/);
+ assert.match(yaml,/--qwen35-9b-synthetic/);
+ assert.match(yaml,/^\s*contents:\s*read\s*$/m);
+ assert.doesNotMatch(yaml,/secrets\.|pull_request_target|contents:\s*write/);
 });
