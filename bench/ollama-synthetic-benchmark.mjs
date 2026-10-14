@@ -25,7 +25,7 @@ const FIXTURES=Object.freeze([
     before:"function isAuthorized(user) { return user?.role === 'admin'; }",
     source:'function isAuthorized(user) { return true; }',
     knownStaticBlocker:false,knownSemanticBug:true,
-    oraclePattern:/(?:always returns? true|bypass(?:es|ing)? authorization|authorization (?:check )?bypass(?:ed|es|ing)?|unauthorized access)/i}),
+    oraclePattern:/(?:always returns? true|returns? true for all (?:inputs|users)|bypass(?:es|ed|ing)? (?:the )?(?:original )?(?:authorization|admin|role|requirement)|authorization (?:check )?bypass(?:ed|es|ing)?|unauthorized access)/i}),
   Object.freeze({label:'safe null-checked authorization',path:AUTH_PATH,
     before:"function isAuthorized(user) { return user.role === 'admin'; }",
     source:"function isAuthorized(user) { return user?.role === 'admin'; }",
@@ -37,17 +37,17 @@ const FIXTURES=Object.freeze([
     before:'const rendered = escapeHtml(userInput);',
     source:'const rendered = userInput;',
     knownStaticBlocker:false,knownSemanticBug:true,
-    oraclePattern:/(?:xss|cross.site scripting|unescaped html|html escaping|html escape|injection)/i}),
+    oraclePattern:/(?:xss|cross.site scripting|unescaped html|html escaping|html escape|injection|no longer escap(?:ed|ing).{0,80}(?:render|html|javascript)|arbitrary html(?:\/javascript)? execution)/i}),
   Object.freeze({label:'negative amount validation weakened',path:'src/payment-synthetic.mjs',
     before:"if (amount < 0) throw new Error('invalid');",
     source:"if (amount < -100) throw new Error('invalid');",
     knownStaticBlocker:false,knownSemanticBug:true,
-    oraclePattern:/(?:allow(?:s|ed|ing)? negative|accept(?:s|ed|ing)? negative|negative (?:amounts?|values?) (?:can|are) (?:now )?(?:accepted|allowed)|negative.{0,35}not rejected)/i}),
+    oraclePattern:/(?:allow(?:s|ed|ing)? negative|accept(?:s|ed|ing)? negative|negative (?:amounts?|values?) (?:are |were |can be |now )?(?:now )?(?:accepted|allowed)|negative.{0,35}not rejected|allow(?:s|ed|ing)?.{0,60}(?:negative values?|values between -100 and 0).{0,45}bypass validation)/i}),
   Object.freeze({label:'session token check inverted',path:'src/session-synthetic.mjs',
     before:'if (token !== session.token) return false;',
     source:'if (token === session.token) return false;',
     knownStaticBlocker:false,knownSemanticBug:true,
-    oraclePattern:/(?:valid (?:session )?tokens? (?:are |is )?(?:rejected|denied)|(?:reject|deny)(?:s|ing)? (?:the )?valid (?:session )?token|invalid (?:session )?tokens? (?:are |is )?(?:accepted|allowed)|(?:accept|allow)(?:s|ing)? invalid (?:session )?token)/i}),
+    oraclePattern:/(?:valid (?:session )?tokens? (?:are |is |to be )?(?:rejected|denied)|(?:reject|deny)(?:s|ing)? (?:the )?valid (?:session )?token|invalid (?:session )?tokens? (?:are |is |to be )?(?:accepted|allowed)|(?:accept|allow)(?:s|ing)? invalid (?:session )?token)/i}),
   Object.freeze({label:'safe nonnegative clamp',path:'src/bounds-synthetic.mjs',
     before:'const limit = Math.min(amount, max);',
     source:'const limit = Math.max(0, Math.min(amount, max));',
@@ -60,13 +60,22 @@ const FIXTURES=Object.freeze([
     path:'src/auth-deletion-synthetic.mjs',
     before:'if (!user.isAdmin) return false;',source:null,deletionOnly:true,
     knownStaticBlocker:false,knownSemanticBug:true,
-    oraclePattern:/(?:removed|deleted|missing|absent|bypass(?:ed|es|ing)?|without).{0,60}(?:admin|authoriz|access|guard)|(?:admin|authoriz|access|guard).{0,60}(?:removed|deleted|missing|absent|bypass(?:ed|es|ing)?|without)/i}),
+    oraclePattern:/(?:removed|removal|deleted|deletion|missing|absent|bypass(?:ed|es|ing)?|without).{0,60}(?:admin|authoriz|access|guard)|(?:admin|authoriz|access|guard).{0,60}(?:removed|removal|deleted|deletion|missing|absent|bypass(?:ed|es|ing)?|without)/i}),
   // Legitimate OLD-side deletion that must not cause a blocking false alert.
   Object.freeze({label:'removed inert diagnostic logging',
     path:'src/diagnostic-synthetic.mjs',
     before:'console.debug("entered validation");',source:null,deletionOnly:true,
     knownStaticBlocker:false,knownSemanticBug:false})
 ]);
+// Fixed PUBLIC synthetic-only oracle; do not use it to score real private PRs.
+export function scoreFixedSyntheticOracle(label,explanation){
+  if(typeof label!=='string'||typeof explanation!=='string'||explanation.length>65536)return false;
+  // A statement that denies removal of an authorization guard cannot earn credit.
+  if(label==='deleted authorization guard without replacement'&&
+     /\b(?:no|not|never)\b.{0,75}\b(?:check|guard)\b.{0,25}\b(?:removed|deleted|bypassed)\b/i.test(explanation))return false;
+  const fixture=FIXTURES.find(f=>f.label===label);
+  return Boolean(fixture?.knownSemanticBug&&fixture.oraclePattern.test(explanation));
+}
 function deny(code){throw Error(code);}
 // Whitelisted diagnostic codes only. NEVER echo arbitrary model/API errors.
 export function safeBenchmarkErrorCode(error){
@@ -211,7 +220,7 @@ export async function runSyntheticLocalOllamaBenchmark({
     const modelText=syntheticReport.findings.map(f=>
       (f.message+' '+f.evidence).toLowerCase()).join(' ');
     const semanticOracleHit=fixture.knownSemanticBug &&
-      completion.findingCount>0 && fixture.oraclePattern.test(modelText);
+      completion.findingCount>0 && scoreFixedSyntheticOracle(fixture.label,modelText);
     cases.push(Object.freeze({
       label:fixture.label,seededStaticBlocker:fixture.knownStaticBlocker,
       modelMessages:Object.freeze(modelMessages),
