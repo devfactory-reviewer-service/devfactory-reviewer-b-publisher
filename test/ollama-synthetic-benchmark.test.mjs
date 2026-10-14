@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { runSyntheticLocalOllamaBenchmark,safeBenchmarkErrorCode,evaluateSyntheticReviewQuality }
+import { runSyntheticLocalOllamaBenchmark,safeBenchmarkErrorCode,evaluateSyntheticReviewQuality,scoreFixedSyntheticOracle }
   from '../bench/ollama-synthetic-benchmark.mjs';
 
 const ENDPOINT='http://127.0.0.1:11434/api/chat';
@@ -322,4 +322,33 @@ test('R76 benchmark exercises OLD-side deletion grammar on both benign and unsaf
  assert.equal(harmless.semanticFindingDetected,false);
  assert.equal(result.syntheticQualityGatePassed,false);
  assert.equal(result.approvalAuthorized,false);
+});
+
+test('historical public 4B descriptions are directionally valid, reverse claims stay rejected',()=>{
+  const realCorrect=[
+    ['removed authorization check',"The function now returns true for all inputs, bypassing the original requirement that only users with role 'admin' are authorized."],
+    ['removed HTML escaping','User input is no longer escaped before rendering, allowing arbitrary HTML/JavaScript execution.'],
+    ['negative amount validation weakened','The condition amount < -100 is less restrictive than before, allowing values between -100 and 0 to bypass validation.'],
+    ['session token check inverted','Logic inversion causes valid tokens to be rejected and invalid tokens to be accepted.'],
+    ['deleted authorization guard without replacement','Removal of isAdmin check allows non-admin users to delete resources.']
+  ];
+  for(const [label,explanation] of realCorrect)
+    assert.equal(scoreFixedSyntheticOracle(label,explanation),true,label);
+  const incorrect=[
+    ['negative amount validation weakened','Increasing the threshold to -100 may allow valid payments to be incorrectly rejected.'],
+    ['session token check inverted','The condition incorrectly accepts a matching token, allowing unauthorized access.'],
+    ['removed authorization check','This change now enforces role-based authorization.'],
+    ['removed HTML escaping','The change escapes more HTML and is safer.'],
+    ['deleted authorization guard without replacement','No authorization check was removed or bypassed.']
+  ];
+  for(const [label,explanation] of incorrect)
+    assert.equal(scoreFixedSyntheticOracle(label,explanation),false,label);
+  assert.equal(scoreFixedSyntheticOracle('safe null-checked authorization',
+    'Optional chaining may allow unauthorized access.'),false);
+  const gate=evaluateSyntheticReviewQuality({
+    seededSemanticBugs:5,seededSemanticBugsDetected:5,
+    cleanFixtures:5,cleanFixtureFalseAlerts:2,cleanFixtureBlockingFalseAlerts:1
+  });
+  assert.equal(gate.syntheticQualityGatePassed,false);
+  assert.equal(gate.approvalAuthorized,false);
 });
