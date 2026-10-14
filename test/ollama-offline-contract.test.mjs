@@ -298,6 +298,10 @@ test('Qwen 3.5 4B candidate is LOCAL-only and emits non-thinking bounded JSON',(
  assert.equal(request.stream,false);
  assert.equal(request.keep_alive,0);
  assert.equal(request.options.num_ctx,8192);
+ assert.match(request.messages[0].content,/FINAL REGRESSION PROOF CHECK/);
+ assert.match(request.messages[0].content,/hypothetical callers are never evidence/);
+ const baseline=JSON.parse(prepareOfflineOllamaCandidate({plan:plan(),model:'qwen2.5-coder:7b'}).privateRequestJson);
+ assert.doesNotMatch(baseline.messages[0].content,/FINAL REGRESSION PROOF CHECK/);
  assert.equal(x.modelExecuted,false);
  assert.equal(x.independentReviewVerified,false);
  assert.equal(x.approvalAuthorized,false);
