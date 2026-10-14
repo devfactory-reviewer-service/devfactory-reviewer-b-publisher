@@ -327,6 +327,7 @@ test('R76 benchmark exercises OLD-side deletion grammar on both benign and unsaf
 test('historical public 4B descriptions are directionally valid, reverse claims stay rejected',()=>{
   const realCorrect=[
     ['removed authorization check',"The function now returns true for all inputs, bypassing the original requirement that only users with role 'admin' are authorized."],
+    ['removed authorization check','The isAuthorized function now always returns `true`, bypassing any authorization checks.'],
     ['removed HTML escaping','User input is no longer escaped before rendering, allowing arbitrary HTML/JavaScript execution.'],
     ['negative amount validation weakened','The condition amount < -100 is less restrictive than before, allowing values between -100 and 0 to bypass validation.'],
     ['negative amount validation weakened','Lowering the threshold to -100 may allow previously rejected negative amounts.'],
