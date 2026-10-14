@@ -76,8 +76,17 @@ export async function executeLocalOllamaReview({
       headers:{'Content-Type':'application/json','Accept':'application/json'},
       body:req.privateRequestJson
     });
-  }catch{
+  }catch(error){
     if(modelSignal.aborted)deny('LOCAL_MODEL_REQUEST_TIMEOUT');
+    // Classify only explicit, known LOCAL socket failure codes. Do not log
+    // error.message, cause, stack, PRIVATE request data or server output.
+    const localTransportCodes=new Set([
+      'ECONNRESET','ECONNREFUSED','EPIPE','UND_ERR_SOCKET',
+      'UND_ERR_HEADERS_TIMEOUT','UND_ERR_BODY_TIMEOUT'
+    ]);
+    if(error instanceof TypeError
+      && localTransportCodes.has(error?.cause?.code))
+      deny('LOCAL_MODEL_TRANSPORT_INTERRUPTED');
     deny('LOCAL_MODEL_REQUEST_FAILED');
   }
   // Production fetch supplies a real Headers object. Reject malformed

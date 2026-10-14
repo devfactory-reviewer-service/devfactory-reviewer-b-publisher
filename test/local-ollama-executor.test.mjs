@@ -175,3 +175,18 @@ test('R64 slow CPU allowance is finite and LOCAL-only',()=>{
  assert.match(src,/const LOCAL_URL='http:\/\/127\.0\.0\.1:11434\/api\/chat'/);
  assert.doesNotMatch(src,/fetchImpl\(.*https:\/\//);
 });
+
+
+test('known Ollama loopback disconnects have a safe, bounded diagnostic',async()=>{
+ const sensitive='SENSITIVE_LOCAL_MODEL_CAUSE_NEVER_EMIT';
+ for(const code of ['ECONNRESET','ECONNREFUSED','EPIPE',
+  'UND_ERR_SOCKET','UND_ERR_HEADERS_TIMEOUT','UND_ERR_BODY_TIMEOUT']){
+  await assert.rejects(()=>executeLocalOllamaReview(ctx({
+   fetchImpl:async()=>{throw new TypeError(sensitive,{cause:{code}});}
+  })),e=>e.message==='LOCAL_MODEL_TRANSPORT_INTERRUPTED'
+   &&!e.message.includes(sensitive)&&!e.message.includes(code));
+ }
+ await assert.rejects(()=>executeLocalOllamaReview(ctx({
+  fetchImpl:async()=>{throw new TypeError(sensitive,{cause:{code:'UNKNOWN'}});}
+ })),e=>e.message==='LOCAL_MODEL_REQUEST_FAILED');
+});

@@ -78,6 +78,10 @@ jobs:
           OLLAMA_HOST: '127.0.0.1:11434'
           OLLAMA_NO_CLOUD: '1'
           OLLAMA_NUM_PARALLEL: '1'
+          # Bound CPU-hosted model memory without changing Qwen or authority.
+          OLLAMA_MAX_LOADED_MODELS: '1'
+          OLLAMA_FLASH_ATTENTION: '1'
+          OLLAMA_KV_CACHE_TYPE: 'q8_0'
           MODEL: 'qwen2.5-coder:7b'
         run: |
           set -euo pipefail
@@ -106,3 +110,30 @@ jobs:
           set -euo pipefail
           cd source
           node scripts/protected-real-semantic-review.mjs
+      - name: Sanitized local model failure diagnostics
+        if: ${{ failure() }}
+        shell: bash
+        run: |
+          # No Ollama stderr, API bodies, prompts, diffs, filenames or
+          # credentials in public workflow logs; only bounded system state.
+          set -euo pipefail
+          if curl --fail --silent --max-time 3 --noproxy '*'             'http://127.0.0.1:11434/api/tags' > /dev/null 2>&1; then
+            echo 'OLLAMA_LOOPBACK_REACHABLE'
+          else
+            echo 'OLLAMA_LOOPBACK_UNREACHABLE'
+          fi
+          if pgrep -x ollama > /dev/null 2>&1; then
+            echo 'OLLAMA_PROCESS_PRESENT'
+          else
+            echo 'OLLAMA_PROCESS_ABSENT'
+          fi
+          if test -r /proc/meminfo; then
+            awk '/^(MemTotal:|MemAvailable:|SwapTotal:|SwapFree:)/ {
+              print "RESOURCE_" $1 " " $2 " kB"
+            }' /proc/meminfo
+          fi
+          if test -r /sys/fs/cgroup/memory.events; then
+            awk '/^(oom|oom_kill|oom_group_kill) / {
+              print "CGROUP_" $1 " " $2
+            }' /sys/fs/cgroup/memory.events
+          fi
