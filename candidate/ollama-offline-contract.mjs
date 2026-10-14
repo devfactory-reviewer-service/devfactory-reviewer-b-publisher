@@ -9,7 +9,7 @@ import { normalizeUntrustedModelFindings,prepareBoundedSemanticReview }
 
 // Dormant, pure Ollama adapter. No network, no tokens, no inference and no POST.
 // Inspired by MIT-licensed The-PR-Agent/pr-agent, without copying its source.
-const MODELS=Object.freeze(['qwen2.5-coder:1.5b','qwen2.5-coder:7b','qwen2.5-coder:14b','qwen3:8b','qwen3-coder:30b','qwen3.5:4b']);
+const MODELS=Object.freeze(['qwen2.5-coder:1.5b','qwen2.5-coder:7b','qwen2.5-coder:14b','qwen3:8b','qwen3-coder:30b','qwen3.5:4b','qwen3.5:9b']);
 const SHA40=/^[0-9a-f]{40}$/, HASH=/^[0-9a-f]{64}$/;
 const RUN=/^[A-Za-z0-9_:-]{8,180}$/;
 // Ollama supports strict JSON-schema structured output on /api/chat.
@@ -171,7 +171,7 @@ export function prepareOfflineOllamaCandidate({
     return JSON.stringify({
       model,stream:false,format:reviewSchema,
       keep_alive:protectedEphemeralKeepAlive?'5m':0,
-      ...(['qwen3:8b','qwen3.5:4b'].includes(model)?{think:false}:{}),
+      ...(['qwen3:8b','qwen3.5:4b','qwen3.5:9b'].includes(model)?{think:false}:{}),
       options:{temperature:0,num_ctx:8192,num_predict:maxOutputTokens},
       messages:[{role:'system',content:system+
         (withContext?'\\nThe authenticated_full_diff_declarations field lists only lexical names present on the HEAD side of this PR diff (added or unchanged hunk-context lines), including OTHER fragments. A name listed here must not be claimed absent solely because it is omitted from this shard; lexical scope and imports are not proven.':'')},
