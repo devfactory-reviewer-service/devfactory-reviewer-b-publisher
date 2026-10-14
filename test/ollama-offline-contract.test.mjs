@@ -433,3 +433,18 @@ test('R86 path binding prevents citing another file line even in multi-file sche
  ]);
  assert.equal(JSON.stringify(request).includes('deenkids7-dev/deenkids'),true);
 });
+
+test('Qwen 3.5 9B candidate is only a local nonauthorizing bounded trial',()=>{
+ const candidate=prepareOfflineOllamaCandidate({plan:plan(),model:'qwen3.5:9b'});
+ const request=JSON.parse(candidate.privateRequestJson);
+ assert.equal(request.model,'qwen3.5:9b');
+ assert.equal(request.stream,false);
+ assert.equal(request.think,false);
+ assert.equal(request.keep_alive,0);
+ assert.equal(request.options.num_ctx,8192);
+ assert.ok(Number.isSafeInteger(request.options.num_predict));
+ assert.equal(candidate.approvalAuthorized,false);
+ assert.equal(candidate.modelExecuted,false);
+ assert.equal(candidate.privateSourceProcessingAuthorized,false);
+ assert.equal(candidate.independentReviewVerified,false);
+});
