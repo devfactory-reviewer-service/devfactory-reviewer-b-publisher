@@ -9,6 +9,7 @@ import net from 'node:net';
 import {spawn} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import {planPinnedSyntheticSshTunnel} from './runpod-gpu-ssh-plan.mjs';
+import {verifyPublicGpuResidency} from './runpod-gpu-residency.mjs';
 
 const deny=code=>{throw Error(code)};
 const permitted=Object.freeze(['podId','host','port','sshPrivateKeyPath',
@@ -107,6 +108,7 @@ async function capturePublicBenchmark(child,maxMs){
 export async function runPublicSyntheticPinnedTunnel(plan,{
  spawnImpl=spawn,connectCheck=canConnect,
  waitForTunnel=awaitHealthyTunnel,benchmarkTimeoutMs,
+ residencyCheck=verifyPublicGpuResidency,
 }={}){
  if(!plan?.ok||plan.canReviewPrivateCode!==false||
     plan.mayStartPod!==false||plan.mayPublishReview!==false||
@@ -135,7 +137,21 @@ export async function runPublicSyntheticPinnedTunnel(plan,{
   });
   const result=await capturePublicBenchmark(bench,benchmarkTimeoutMs??maxMs);
   if(externalAbort)deny('GPU_SESSION_INTERRUPTED');
-  return result;
+  // GET-only model memory proof from the pinned SSH loopback after the public
+  // holdout. CPU-offloaded, absent or unverified models fail closed.
+  const proof=await residencyCheck({model:plan.model});
+  if(proof?.gpuResidencyVerified!==true||
+     proof?.ollamaReportedFullyInVram!==true||
+     proof?.model!==plan.model||
+     proof?.privateSourceReviewed!==false||
+     proof?.approvalAuthorized!==false||
+     proof?.mayStartPod!==false||
+     proof?.mayPublishReview!==false||
+     proof?.mayMerge!==false)
+    deny('GPU_RESIDENCY_PROOF_UNVERIFIED');
+  if(externalAbort)deny('GPU_SESSION_INTERRUPTED');
+  return Object.freeze({...result,
+    gpuResidencyVerified:true,ollamaReportedFullyInVram:true});
  }finally{
   clearTimeout(watchdog);
   process.removeListener('SIGINT',abort);

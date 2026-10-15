@@ -88,7 +88,12 @@ test('public bridge runs only synthetic fixtures and tears down SSH afterwards',
  };
  const result=await runPublicSyntheticPinnedTunnel(plan,{
   spawnImpl,connectCheck:async()=>false,waitForTunnel:async()=>{},
-  benchmarkTimeoutMs:2000
+  benchmarkTimeoutMs:2000,
+  residencyCheck:async({model})=>({
+   model,gpuResidencyVerified:true,ollamaReportedFullyInVram:true,
+   approvalAuthorized:false,privateSourceReviewed:false,
+   mayStartPod:false,mayPublishReview:false,mayMerge:false
+  })
  });
  assert.equal(started.length,2);
  assert.equal(started[0].bin,'ssh');
@@ -97,6 +102,19 @@ test('public bridge runs only synthetic fixtures and tears down SSH afterwards',
   ['bench/ollama-synthetic-benchmark.mjs','--runpod-35b-holdout']);
  assert.equal(started[0].child.killed,true);
  assert.equal(result.syntheticQualityGatePassed,true);
- assert.equal(result.gpuResidencyVerified,false);
+ assert.equal(result.gpuResidencyVerified,true);
  assert.equal(result.approvalAuthorized,false);
+ // A forged public benchmark success without live GPU residency must
+ // still FAIL and must tear down the SSH tunnel. No model call is trusted.
+ started.length=0;
+ await assert.rejects(()=>runPublicSyntheticPinnedTunnel(plan,{
+  spawnImpl,connectCheck:async()=>false,waitForTunnel:async()=>{},
+  benchmarkTimeoutMs:2000,
+  residencyCheck:async({model})=>({
+   model,gpuResidencyVerified:false,ollamaReportedFullyInVram:false,
+   approvalAuthorized:false,privateSourceReviewed:false,
+   mayStartPod:false,mayPublishReview:false,mayMerge:false
+  })
+ }),/GPU_RESIDENCY_PROOF_UNVERIFIED/);
+ assert.equal(started[0].child.killed,true);
 });
