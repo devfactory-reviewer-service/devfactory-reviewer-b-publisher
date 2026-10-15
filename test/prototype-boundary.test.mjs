@@ -32,6 +32,33 @@ test('no workflow has access to private App secrets, write token or privileged t
     // Permit exactly one root permissions mapping; reject ANY nested one.
     assert.equal((contents.match(/^permissions\s*:/gm)||[]).length,1);
     assert.doesNotMatch(contents,/^[ \t]+permissions\s*:/m);
+    if(filename==='runpod-control-bounded-start.yml'){
+      // Guard the only ever allowed billed Pod activation workflow.
+      // A live independent watchdog and conservative monthly budget are
+      // checked in the exact privileged script BEFORE a fixed Pod START.
+      assert.match(contents,/^on:\n  issue_comment:\n    types: \[created\]\n/m);
+      assert.match(contents,/^permissions: \{\}\n/m);
+      assert.match(contents,/environment:\s*runpod-gpu-control/);
+      assert.match(contents,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
+      assert.match(contents,/github\.ref == 'refs\/heads\/main'/);
+      assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/);
+      assert.match(contents,/github\.event\.issue\.number == 52/);
+      assert.match(contents,/github\.event\.comment\.body == 'DEVFACTORY_RUNPOD_START_24MIN_R164'/);
+      assert.match(contents,/cancel-in-progress: false/);
+      assert.match(contents,/sleep 1440/);
+      assert.match(contents,/timeout-minutes: 33/);
+      assert.match(contents,/if: \$\{\{ always\(\) \}\}/);
+      assert.equal((contents.match(/secrets\.RUNPOD_CONTROL_API_KEY/g)||[]).length,2);
+      assert.match(contents,/node source\/scripts\/runpod-control-bounded-start\.mjs --start-exact-bounded/);
+      assert.match(contents,/node source\/scripts\/runpod-control-stop-exact-pod\.mjs --stop-exact/);
+      assert.equal((contents.match(/^      - name:/gm)||[]).length,4);
+      assert.match(contents,/--proto '=https' --proto-redir '=https'/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|push|workflow_run|workflow_call|schedule|workflow_dispatch)\s*:/);
+      assert.doesNotMatch(contents,/\b[A-Za-z-]+\s*:\s*write\b|\bwrite-all\b/);
+      assert.doesNotMatch(contents,/\b(?:github\.token|GITHUB_TOKEN|GH_TOKEN|actions\/checkout)\b/);
+      assert.doesNotMatch(contents,/\b(?:delete-pod|terminate-pod|force-push)\b/);
+      continue;
+    }
     if(filename==='runpod-control-stop-and-watchdog.yml'){
       // The powerful CONTROL secret is accessible only in an owner-approved,
       // exact protected main STOP-only workflow. No START, create or schedule.
