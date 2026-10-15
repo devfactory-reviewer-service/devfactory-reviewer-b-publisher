@@ -35,6 +35,7 @@ jobs:
             --output "$RUNNER_TEMP/bounded-start-publisher.tar.gz"
           tar -xzf "$RUNNER_TEMP/bounded-start-publisher.tar.gz" -C source --strip-components=1
           node --test source/test/runpod-control-bounded-start.test.mjs
+          node --test source/test/runpod-control-bounded-start-v2.test.mjs
           node --test source/test/runpod-control-stop-exact-pod.test.mjs
       - name: Require active independent watchdog plus fresh budget then start exact Pod
         shell: bash
@@ -43,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${RUNPOD_CONTROL_API_KEY:-}"
-          node source/scripts/runpod-control-bounded-start.mjs --start-exact-bounded
+          node source/scripts/runpod-control-bounded-start-v2.mjs --start-exact-bounded
       - name: Bound expensive GPU lease to 24 minutes
         shell: bash
         run: |
