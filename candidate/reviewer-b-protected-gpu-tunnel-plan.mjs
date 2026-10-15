@@ -7,7 +7,30 @@
  * and COMMENTED-only review publication. It must never use a GPU URL.
  */
 import path from 'node:path';
-import {planBoundedRunPodGpuTest} from '../bench/runpod-gpu-budget.mjs';
+// Production main must NOT import the unrelated draft PR #42 budget helper.
+// Duplicate its fail-closed arithmetic under the owner 15 EUR policy.
+// This calculates a quote; it is not provider billing or stop authority.
+const validMoney=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=10000;
+function planBoundedRunPodGpuTest({
+  podId,spentToDateEur,providerGpuEurPerHour,
+  providerStorageEurPerHour,extraEur=0,standbyEur=0,
+  proposedMinutes,independentlyEnforcedStop=false,
+  quoteVerified=false,availableEuroBalanceVerified=false
+}={}){
+  if(podId!=='ao1z73um41h61i')return {ok:false,reason:'GPU_FOREIGN_POD'};
+  if(![spentToDateEur,providerGpuEurPerHour,providerStorageEurPerHour,
+       extraEur,standbyEur].every(validMoney)||providerGpuEurPerHour<=0)
+    return {ok:false,reason:'GPU_COST_QUOTE_MISSING'};
+  if(!Number.isSafeInteger(proposedMinutes)||proposedMinutes<1||proposedMinutes>60)
+    return {ok:false,reason:'GPU_SESSION_DURATION_INVALID'};
+  if(!independentlyEnforcedStop||!quoteVerified||!availableEuroBalanceVerified)
+    return {ok:false,reason:'GPU_COST_OR_STOP_AUTHORITY_MISSING'};
+  const estimate=spentToDateEur+extraEur+standbyEur+
+    (providerGpuEurPerHour+providerStorageEurPerHour)*(proposedMinutes/60);
+  if(!Number.isFinite(estimate)||estimate>12+1e-9)
+    return {ok:false,reason:'GPU_TWELVE_EURO_OPERATING_ENVELOPE_EXCEEDED'};
+  return {ok:true,operatingEnvelopeEur:12,reservedMarginEur:3};
+}
 
 const REPO='devfactory-reviewer-trust/devfactory-reviewer-b-publisher';
 const REF=REPO+'/.github/workflows/reviewer-b-private-semantic.yml@refs/heads/main';
