@@ -69,7 +69,8 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.match(contents,/timeout-minutes: 33/);
       assert.match(contents,/if: \$\{\{ always\(\) \}\}/);
       assert.equal((contents.match(/secrets\.RUNPOD_CONTROL_API_KEY/g)||[]).length,2);
-      assert.match(contents,/node source\/scripts\/runpod-control-bounded-start\.mjs --start-exact-bounded/);
+      assert.match(contents,/node source\/scripts\/runpod-control-bounded-start-v2\.mjs --start-exact-bounded/);
+      assert.match(contents,/node --test source\/test\/runpod-control-bounded-start-v2\.test\.mjs/);
       assert.match(contents,/node source\/scripts\/runpod-control-stop-exact-pod\.mjs --stop-exact/);
       assert.equal((contents.match(/^      - name:/gm)||[]).length,4);
       assert.match(contents,/--proto '=https' --proto-redir '=https'/);
