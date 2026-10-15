@@ -29,8 +29,9 @@ export function validateSyntheticBridgeConfig(config,stats=fs){
  return plan;
 }
 
-export function sanitizePublicSyntheticResult(raw) {
- if(!raw||typeof raw!=='object'||raw.model!=='qwen3.6:35b-a3b-coding'||
+export function sanitizePublicSyntheticResult(raw,expectedModel='qwen3.6:35b-a3b-coding') {
+ if(!['qwen3.6:35b-a3b-coding','qwen2.5-coder:7b'].includes(expectedModel)||
+   !raw||typeof raw!=='object'||raw.model!==expectedModel||
    raw.privateSourceReviewed!==false||raw.approvalAuthorized!==false||
    raw.independentReviewerProvenanceVerified!==false||
    !Number.isSafeInteger(raw.testsCompleted)||raw.testsCompleted<10||
@@ -82,7 +83,7 @@ async function awaitHealthyTunnel(tunnel){
  }
  deny('GPU_SSH_MODEL_LOOPBACK_UNAVAILABLE');
 }
-async function capturePublicBenchmark(child,maxMs){
+async function capturePublicBenchmark(child,maxMs,expectedModel){
  const stdout=[];
  let size=0,aborted=false;
  const timeout=setTimeout(()=>{aborted=true;child.kill('SIGKILL')},maxMs);
@@ -102,7 +103,7 @@ async function capturePublicBenchmark(child,maxMs){
   let parsed;
   try{parsed=JSON.parse(Buffer.concat(stdout).toString('utf8'))}
   catch{deny('GPU_SYNTHETIC_INVALID_RESULT')}
-  return sanitizePublicSyntheticResult(parsed);
+  return sanitizePublicSyntheticResult(parsed,expectedModel);
  }finally{clearTimeout(timeout)}
 }
 export async function runPublicSyntheticPinnedTunnel(plan,{
@@ -135,7 +136,7 @@ export async function runPublicSyntheticPinnedTunnel(plan,{
    stdio:['ignore','pipe','ignore'],
    env:{...process.env,OLLAMA_HOST:'127.0.0.1:11434',OLLAMA_NO_CLOUD:'1'}
   });
-  const result=await capturePublicBenchmark(bench,benchmarkTimeoutMs??maxMs);
+  const result=await capturePublicBenchmark(bench,benchmarkTimeoutMs??maxMs,plan.model);
   if(externalAbort)deny('GPU_SESSION_INTERRUPTED');
   // GET-only model memory proof from the pinned SSH loopback after the public
   // holdout. CPU-offloaded, absent or unverified models fail closed.
