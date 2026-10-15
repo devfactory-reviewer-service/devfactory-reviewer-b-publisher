@@ -102,7 +102,7 @@ export async function executeProtectedOpenRouterReview({
   const comment=prepareOpenRouterNativeComment({preflight,cloud,runId});
   // Refresh short-lived GitHub App credentials AFTER paid inference.
   stage='READ_REFRESH';
-  const refreshNow=Date.now();
+  const refreshNow=now;
   const jwtAgain=createReviewerBAppJwt({privateKeyPem:pem,now:refreshNow});
   const readAgain=await createScopedReviewerBInstallationToken({
     appJwt:jwtAgain,purpose:'reviewRead',now:refreshNow,fetchImpl
@@ -111,10 +111,10 @@ export async function executeProtectedOpenRouterReview({
   await fetchAndVerifyOwnerCloudConsent({
     readToken:readAgain.token,prNumber:issuePr,
     headSha:preflight.target.headSha,
-    model:env.REVIEWER_B_OPENROUTER_MODEL,now:Date.now(),fetchImpl
+    model:env.REVIEWER_B_OPENROUTER_MODEL,now,fetchImpl
   });
   stage='WRITE';
-  const writerNow=Date.now();
+  const writerNow=now;
   const writeJwt=createReviewerBAppJwt({privateKeyPem:pem,now:writerNow});
   const write=await createScopedReviewerBInstallationToken({
    appJwt:writeJwt,purpose:'publish',now:writerNow,fetchImpl

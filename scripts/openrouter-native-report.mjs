@@ -107,7 +107,9 @@ export function prepareOpenRouterNativeComment({preflight,cloud,runId}={}){
     deny('OR_NATIVE_FINDING_INVALID');
  }
  let body='';
- for(const max of [160,115,80,48,24]){
+ // Preserve every finding; progressively shorten excerpts when GitHub's
+ // COMMENT body limit would otherwise reject a complete, authenticated report.
+ for(const max of [160,115,80,48,24,16,8]){
   const rows=report.findings.map((f,i)=>
    '- #'+(i+1)+' '+f.severity.toUpperCase()+' '+concise(f.path,120)+
    ':'+f.line+(f.side?' ['+f.side+']':'')+

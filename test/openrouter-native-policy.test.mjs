@@ -121,7 +121,10 @@ test('protected cloud run never active from draft, PR event or missing policy',(
   {GITHUB_ACTOR:'deenkids7-dev'},
   {REVIEWER_B_EXPECTED_HEAD:'f'.repeat(39)},
   {REVIEWER_B_OPENROUTER_MODEL:'openrouter/auto'},
-  {GITHUB_WORKFLOW_REF:'untrusted'}
+  {GITHUB_WORKFLOW_REF:'untrusted'},
+  {REVIEWER_B_TARGET_PR:'0'},
+  {REVIEWER_B_TARGET_PR:'932.5'},
+  {REVIEWER_B_TARGET_PR:'932x'}
  ])assert.equal(canRunProtectedOpenRouterReview({...base,...changes}),false);
 });
 test('cloud code path includes mandatory native uniqueness and owner consent',async()=>{
@@ -133,4 +136,22 @@ test('cloud code path includes mandatory native uniqueness and owner consent',as
  assert.ok(src.includes('approvedCloudCommentPublication:true'));
  assert.ok(src.includes('fetchAndVerifyOwnerCloudConsent'));
  assert.ok(src.includes('CLOUD_NATIVE_READBACK_INVALID'));
+});
+test('protected cloud refreshes use the injected clock',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const {fileURLToPath}=await import('node:url');
+ const src=readFileSync(fileURLToPath(new URL('../scripts/protected-real-openrouter-review.mjs',import.meta.url)),'utf8');
+ assert.doesNotMatch(src,/const refreshNow=Date\.now\(\)|now:Date\.now\(\)|const writerNow=Date\.now\(\)/);
+});
+test('large valid cloud reports remain publishable within the GitHub body limit',()=>{
+ const long='x'.repeat(250);
+ const report=Buffer.from(JSON.stringify({schema:'devfactory.reviewer-b.findings.v1',
+  run_id:RUN,summary:'Synthetic bounded report',findings:Array.from({length:128},(_,i)=>({
+   path:'src/f'+i+'.mjs',line:i+1,fingerprint:String(i).padStart(64,'a'),
+   severity:'low',message:long,evidence:long
+  }))}));
+ const out=prepareOpenRouterNativeComment({preflight,cloud:{...cloud(),
+  findingCount:128,privateCanonicalReportBytes:report},runId:RUN});
+ assert.ok(out.body.length<=12000);
+ assert.match(out.body,/Semantic findings: 128/);
 });
