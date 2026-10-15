@@ -39,7 +39,7 @@ test('a missing verified provider bill or stop watchdog denies cloud spend',()=>
   {spentToDateEur:11.99},
   {spentToDateEur:14.99},
   {extraEur:100},
-  {standbyEur:10},
+  {standbyEur:12},
  ];
  for(const override of failures){
   const x=planBoundedRunPodGpuTest({...quote,...override});
