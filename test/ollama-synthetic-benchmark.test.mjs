@@ -248,12 +248,13 @@ test('opt-in Qwen3 CI must run only synthetic cases with no privileged permissio
 test('opt-in Qwen3-only benchmark selects only 8B model while preserving full comparison label',()=>{
  const y=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',import.meta.url),'utf8');
  const options=[...y.matchAll(/'(\[\{"model":.*?\}\])'/g)].map(x=>JSON.parse(x[1]));
- assert.equal(options.length,5);
+ assert.equal(options.length,6);
  assert.deepEqual(options[0],[{model:'qwen2.5-coder:7b',cli_arg:''}]);
  assert.deepEqual(options[1],[{model:'qwen3:8b',cli_arg:'--qwen3-synthetic'}]);
  assert.deepEqual(options[2],[{model:'qwen3.5:4b',cli_arg:'--qwen35-synthetic'}]);
  assert.deepEqual(options[3],[{model:'qwen3.5:9b',cli_arg:'--qwen35-9b-synthetic'}]);
- assert.deepEqual(options[4].map(x=>x.model),
+ assert.deepEqual(options[4],[{model:'qwen3.5:9b',cli_arg:'--qwen35-9b-holdout'}]);
+ assert.deepEqual(options[5].map(x=>x.model),
   ['qwen2.5-coder:7b','qwen2.5-coder:14b','qwen3:8b']);
  assert.match(y,/reviewer-b-benchmark-qwen35/);
  assert.match(y,/--qwen35-synthetic/);
