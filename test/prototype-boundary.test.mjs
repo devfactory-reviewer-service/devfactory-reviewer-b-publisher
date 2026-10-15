@@ -32,6 +32,28 @@ test('no workflow has access to private App secrets, write token or privileged t
     // Permit exactly one root permissions mapping; reject ANY nested one.
     assert.equal((contents.match(/^permissions\s*:/gm)||[]).length,1);
     assert.doesNotMatch(contents,/^[ \t]+permissions\s*:/m);
+    if(filename==='runpod-gpu-readonly-preflight.yml'){
+      // One extra READ-ONLY Pod API preflight, manual and owner-approved.
+      // Do not treat it as an ordinary public synthetic workflow: access
+      // to the environment secret requires a separately protected gate.
+      assert.match(contents,/^on:\n  workflow_dispatch:\n/m);
+      assert.match(contents,/^permissions: \{\}\n/m);
+      assert.match(contents,/^concurrency:\n  group: runpod-readonly-preflight-manual\n  cancel-in-progress: false\n/m);
+      assert.match(contents,/environment:\s*runpod-gpu-preflight/);
+      assert.match(contents,/github\.ref == 'refs\/heads\/main'/);
+      assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/);
+      assert.match(contents,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
+      assert.match(contents,/github\.event_name == 'workflow_dispatch'/);
+      assert.equal((contents.match(/secrets\./g)||[]).length,1);
+      assert.match(contents,/secrets\.RUNPOD_API_KEY/);
+      assert.equal((contents.match(/^      - name:/gm)||[]).length,2);
+      assert.match(contents,/node source\/scripts\/runpod-gpu-readonly-preflight\.mjs --read-only/);
+      assert.match(contents,/--proto '=https' --proto-redir '=https'/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|push|issue_comment|workflow_run|workflow_call|schedule)\s*:/);
+      assert.doesNotMatch(contents,/\b[A-Za-z-]+\s*:\s*write\b|\bwrite-all\b/);
+      assert.doesNotMatch(contents,/\b(?:github\.token|GITHUB_TOKEN|GH_TOKEN|actions\/checkout)\b/);
+      continue;
+    }
     if(filename==='reviewer-b-oidc-permission-probe.yml'){
       // Diagnostic-only protected-main one-shot; no actual OIDC request.
       assert.match(contents,/^on:\n  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-oidc-diagnostic-20261011\.marker\n/m);
