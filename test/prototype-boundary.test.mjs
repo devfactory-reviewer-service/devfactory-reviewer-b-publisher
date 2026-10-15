@@ -36,7 +36,7 @@ test('no workflow has access to private App secrets, write token or privileged t
       // One extra READ-ONLY Pod API preflight, manual and owner-approved.
       // Do not treat it as an ordinary public synthetic workflow: access
       // to the environment secret requires a separately protected gate.
-      assert.match(contents,/^on:\n  workflow_dispatch:\n/m);
+      assert.match(contents,/^on:\n  workflow_dispatch:\n  issue_comment:\n    types: \[created\]\n/m);
       assert.match(contents,/^permissions: \{\}\n/m);
       assert.match(contents,/^concurrency:\n  group: runpod-readonly-preflight-manual\n  cancel-in-progress: false\n/m);
       assert.match(contents,/environment:\s*runpod-gpu-preflight/);
@@ -44,13 +44,18 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/);
       assert.match(contents,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
       assert.match(contents,/github\.event_name == 'workflow_dispatch'/);
+      assert.match(contents,/github\.event_name == 'issue_comment'/);
+      assert.match(contents,/github\.event\.action == 'created'/);
+      assert.match(contents,/github\.event\.issue\.number == 52/);
+      assert.match(contents,/!github\.event\.issue\.pull_request/);
+      assert.match(contents,/github\.event\.comment\.body == 'DEVFACTORY_RUNPOD_READONLY_PREFLIGHT_R154'/);
       assert.equal((contents.match(/secrets\./g)||[]).length,2);
       assert.match(contents,/secrets\.RUNPOD_API_KEY/);
       assert.equal((contents.match(/^      - name:/gm)||[]).length,3);
       assert.match(contents,/node source\/scripts\/runpod-gpu-readonly-preflight\.mjs --read-only/);
       assert.match(contents,/node source\/scripts\/runpod-gpu-billing-readonly\.mjs --read-only-monthly/);
       assert.match(contents,/--proto '=https' --proto-redir '=https'/);
-      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|push|issue_comment|workflow_run|workflow_call|schedule)\s*:/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|push|workflow_run|workflow_call|schedule)\s*:/);
       assert.doesNotMatch(contents,/\b[A-Za-z-]+\s*:\s*write\b|\bwrite-all\b/);
       assert.doesNotMatch(contents,/\b(?:github\.token|GITHUB_TOKEN|GH_TOKEN|actions\/checkout)\b/);
       continue;
