@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import {
  assessPinned7BGpuResident,withProtectedReviewerBGpuTunnel
-} from '../candidate/reviewer-b-protected-gpu-tunnel-runtime.mjs';
+} from '../scripts/reviewer-b-protected-gpu-tunnel-runtime.mjs';
 const POD='ao1z73um41h61i';
 const base=()=>({
  context:{
