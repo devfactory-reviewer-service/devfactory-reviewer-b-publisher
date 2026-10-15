@@ -39,7 +39,8 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.match(contents,/^on:\n  workflow_dispatch:\n  issue_comment:\n    types: \[created\]\n/m);
       assert.match(contents,/^permissions: \{\}\n/m);
       assert.match(contents,/^concurrency:\n  group: runpod-readonly-preflight-manual\n  cancel-in-progress: false\n/m);
-      assert.match(contents,/environment:\s*runpod-gpu-preflight/);
+      assert.match(contents,/environment:\s*'runpod-gpu-preflight\.'/);
+      assert.doesNotMatch(contents,/environment:\s*runpod-gpu-preflight\s*\n/);
       assert.match(contents,/github\.ref == 'refs\/heads\/main'/);
       assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/);
       assert.match(contents,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
