@@ -245,7 +245,7 @@ test('opt-in Qwen3 CI must run only synthetic cases with no privileged permissio
  assert.doesNotMatch(y,/security-events:\s*write|secrets\./);
 });
 
-test('opt-in Qwen3-only benchmark selects only 8B model while preserving full comparison label',()=>{
+test('opt-in Qwen3 and Qwen3.5 benchmarks select their respective models while preserving full comparison label',()=>{
  const y=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',import.meta.url),'utf8');
  const options=[...y.matchAll(/'(\[\{"model":.*?\}\])'/g)].map(x=>JSON.parse(x[1]));
  assert.equal(options.length,6);
