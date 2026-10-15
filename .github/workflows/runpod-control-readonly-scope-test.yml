@@ -1,0 +1,52 @@
+name: RunPod CONTROL credential - owner-gated Pod READ ONLY scope test
+
+# The CONTROL credential has account-wide GraphQL READ/WRITE authority;
+# this workflow deliberately executes ONLY a fixed Pod read query.
+# Exact service-owned issue request ONLY. No code from external PRs.
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+concurrency:
+  group: runpod-control-scope-test
+  cancel-in-progress: false
+
+jobs:
+  exact-pod-control-scope-test:
+    name: Protected CONTROL key read-only GraphQL scope check
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'issue_comment' && github.event.action == 'created' && github.event.issue.number == 52 && !github.event.issue.pull_request && github.event.comment.body == 'DEVFACTORY_RUNPOD_CONTROL_PREFLIGHT_R161' }}
+    environment: runpod-gpu-control
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Load protected main source and test before reading control secret
+        shell: bash
+        env:
+          PUBLISHER_REPO: ${{ github.repository }}
+          PUBLISHER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$PUBLISHER_REPO" = 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher'
+          [[ "$PUBLISHER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          mkdir -p source
+          curl --fail --silent --show-error --location --retry 2 \
+            --proto '=https' --proto-redir '=https' --max-time 45 --max-filesize 8388608 \
+            "https://api.github.com/repos/${PUBLISHER_REPO}/tarball/${PUBLISHER_SHA}" \
+            --output "$RUNNER_TEMP/readonly-control-scope.tar.gz"
+          tar -xzf "$RUNNER_TEMP/readonly-control-scope.tar.gz" -C source --strip-components=1
+          test -f source/scripts/runpod-control-readonly-preflight.mjs
+          test -f source/test/runpod-control-readonly-preflight.test.mjs
+          node --test source/test/runpod-control-readonly-preflight.test.mjs
+      - name: Authenticated read-only control credential check, exact Pod only
+        shell: bash
+        env:
+          RUNPOD_CONTROL_API_KEY: ${{ secrets.RUNPOD_CONTROL_API_KEY }}
+        run: |
+          set -euo pipefail
+          if test -z "${RUNPOD_CONTROL_API_KEY:-}"; then
+            echo 'GPU_CONTROL_KEY_NOT_CONFIGURED'
+            exit 1
+          fi
+          node source/scripts/runpod-control-readonly-preflight.mjs --read-only
