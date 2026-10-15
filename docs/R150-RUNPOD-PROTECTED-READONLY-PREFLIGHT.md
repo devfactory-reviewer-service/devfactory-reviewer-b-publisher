@@ -10,7 +10,7 @@ permission setting to **Read only**. Key content must NEVER be copied
 into PRs, issues, logs, comments or chat.
 
 The separately gated workflow `.github/workflows/runpod-gpu-readonly-preflight.yml`
-is a manually dispatched, no-input, service-account-only inspection of
+is a service-account-only inspection (manual dispatch OR exact preflight comment on isolated issue #52) of
 the exact current RunPod Pod ID `ao1z73um41h61i` using one authenticated
 GET to the official RunPod REST v2 endpoint and a second GET to
 `/v2/billing?lastN=1&bucketSize=month`, reporting only the current UTC
@@ -19,7 +19,7 @@ Pod identity and state, or a fixed error code. No RunPod response body
 or credentials are printed.
 
 ## Security gates
-- Workflow dispatch ONLY; no PR/push/issue-comment/schedule trigger.
+- Workflow dispatch OR exact service-signed comment on isolated issue #52 ONLY; no PR/push/schedule trigger. An unrelated issue comment cannot satisfy the job guard.
 - Runs only from protected Publisher `main`, account
   `devfactory-reviewer-service`, and exact repository identity.
 - Environment `runpod-gpu-preflight` has owner-configured required
@@ -34,9 +34,8 @@ or credentials are printed.
 - Never deliver Github App credentials/private DevFactory diff to GPU.
 
 ## Operator sequence AFTER independent code review and a canonical main merge
-1. On GitHub, signed in as `devfactory-reviewer-service`, select
-   Actions > `RunPod GPU - owner-gated READ ONLY Pod preflight`.
-2. Choose `Run workflow` on `main` **once** (no review job re-dispatch).
+1. On GitHub, either run manual dispatch on protected `main` as `devfactory-reviewer-service` OR post the exact marker `DEVFACTORY_RUNPOD_READONLY_PREFLIGHT_R154` from that same service account on isolated issue #52.
+2. Trigger once only. The protected environment approval remains required. Never post the preflight marker on reviewer issue #21.
 3. Under the pending `runpod-gpu-preflight` environment approval,
    have the separately authorized `deenkids7-dev` principal approve.
    Do not bypass protection rules or perform self-review.
@@ -45,11 +44,11 @@ or credentials are printed.
    If key scope fails, investigate
    without printing the key or lowering scope.
 5. Do not resume the pod until independent stop guarantee, EUR month-to-date
-   billing cap <=10 EUR including storage, SSH host identity, security
+   billing cap <=15 EUR including storage, SSH host identity, security
    and private data egress authority are proven.
 
 ## Out of scope and unresolved
-This is **not** a production GPU switch, monthly budget safeguard,
+This is **not** a production GPU switch, monthly 15 EUR budget safeguard,
 GPU stop guarantee or credential installation onto the MSI. The Pod
 currently appears stopped per owner dashboard; the API readback will
 confirm when permitted. The active PRIVATE Reviewer B CPU workflow,
