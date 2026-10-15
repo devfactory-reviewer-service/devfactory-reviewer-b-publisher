@@ -37,7 +37,7 @@ function reply(url,body,status=200,contentType='application/json'){
   body:new Response(JSON.stringify(body)).body};
 }
 function mockedNetwork({changedBody,failAt=0,refusal,modelOverride,
- keyOverrides={},keySequence=null,catalogOverrides={}}={}){
+ keyOverrides={},keySequence=null,catalogOverrides={},cacheHit=false}={}){
  const requests=[];
  const fetchImpl=async(url,options)=>{
   requests.push({url,method:options.method,body:options.body,headers:options.headers});
@@ -45,6 +45,7 @@ function mockedNetwork({changedBody,failAt=0,refusal,modelOverride,
   if(url===ZDR)return reply(url,catalog(catalogOverrides));
   assert.equal(url,URL);
   assert.equal(options.method,'POST');
+  assert.equal(options.headers['X-OpenRouter-Cache'],'false');
   const sent=JSON.parse(options.body);
   assert.equal(sent.provider.zdr,true);
   assert.equal(sent.provider.data_collection,'deny');
@@ -55,13 +56,15 @@ function mockedNetwork({changedBody,failAt=0,refusal,modelOverride,
   assert.equal(sent.max_tokens,1024);
   if(failAt>0&&requests.filter(x=>x.url===URL).length===failAt)
    throw Error('MOCK_TIMEOUT');
-  return reply(url,changedBody??{
+  const response=reply(url,changedBody??{
    model:modelOverride??sent.model,
    choices:[{finish_reason:'stop',message:{role:'assistant',
     ...(refusal!==undefined?{refusal}:{}) ,
     content:JSON.stringify({summary:'No specific synthetic defect',findings:[]})}}],
    usage:{prompt_tokens:900,completion_tokens:70,cost:0.00027}
   });
+  if(cacheHit)response.headers.set('x-openrouter-cache-status','HIT');
+  return response;
  };
  return {fetchImpl,requests,postCount:()=>requests.filter(x=>x.url===URL).length};
 }
@@ -153,6 +156,15 @@ test('correct public synthetic diff and ZDR POST retains true cloud provenance',
  assert.equal(r.mayPublishReview,false);
  assert.equal(net.postCount(),1);
  assert.doesNotMatch(JSON.stringify(r),/return true/);
+});
+test('private OpenRouter response cache is explicitly off and cache hits are denied',async()=>{
+ const net=mockedNetwork({cacheHit:true});
+ const p=await preflightOpenRouterKey({apiKey:K,fetchImpl:net.fetchImpl});
+ await assert.rejects(()=>executeOpenRouterShard({plan:makePlan(),trustedDiffBytes:INPUT,
+  runId:RUN,apiKey:K,preflight:p,
+  approvedThirdPartyPrivateEgress:true,authenticatedGlobalBudgetVerified:true,
+  fetchImpl:net.fetchImpl}),/OR_PRIVATE_RESPONSE_CACHE_FORBIDDEN/);
+ assert.equal(net.postCount(),1);
 });
 test('private input changed after plan cryptographic binding => deny before POST',async()=>{
  const net=mockedNetwork();

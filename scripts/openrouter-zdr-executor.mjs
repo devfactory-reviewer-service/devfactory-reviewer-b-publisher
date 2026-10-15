@@ -197,9 +197,14 @@ export async function executeOpenRouterShard({
    method:'POST',redirect:'error',cache:'no-store',
    signal:AbortSignal.timeout(45000),
    headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json',
-     Accept:'application/json','X-OpenRouter-Title':'DevFactory-Protected-ReviewerB-ZDR'},
+     Accept:'application/json','X-OpenRouter-Title':'DevFactory-Protected-ReviewerB-ZDR',
+     'X-OpenRouter-Cache':'false'},
    body:req.privateRequestJson});
  }catch{deny('OR_REQUEST_INTERRUPTED_NO_AUTORETRY')}
+ // Per-request provider.zdr controls the upstream route, NOT OpenRouter's
+ // separate response cache. Never accept a cached PRIVATE diff response.
+ if(r?.headers?.get?.('x-openrouter-cache-status')?.toUpperCase()==='HIT')
+   deny('OR_PRIVATE_RESPONSE_CACHE_FORBIDDEN');
  const {json,bytes}=await boundedJson(r,CHAT);
  const choice=json?.choices?.[0];
  if(!Array.isArray(json?.choices)||json.choices.length!==1||
