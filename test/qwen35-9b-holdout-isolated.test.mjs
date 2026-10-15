@@ -71,6 +71,7 @@ test('9B holdout CI cannot grant privilege or launch other model benchmarks',()=
  assert.equal(variants.length,6);
  assert.deepEqual(variants[4],[{model:MODEL,cli_arg:'--qwen35-9b-holdout'}]);
  assert.match(workflow,/reviewer-b-benchmark-qwen35-9b-holdout/);
+ assert.match(workflow,/SYNTHETIC_FIXTURE_SET_MISMATCH/);
  assert.match(workflow,/timeout-minutes:\s*45/);
  assert.match(workflow,/^\s*contents:\s*read\s*$/m);
  assert.doesNotMatch(workflow,/secrets\.|pull_request_target|security-events:\s*write/);
