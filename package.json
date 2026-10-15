@@ -6,7 +6,9 @@
   "description": "Secret-free fail-closed verification foundation for Reviewer B; NO production publisher",
   "scripts": {
     "test": "node --test",
-    "benchmark:local-synthetic": "node bench/ollama-synthetic-benchmark.mjs"
+    "benchmark:local-synthetic": "node bench/ollama-synthetic-benchmark.mjs",
+    "benchmark:runpod-gpu-synthetic": "node bench/ollama-synthetic-benchmark.mjs --runpod-35b-synthetic",
+    "benchmark:shards-synthetic": "node bench/semantic-shard-planning-benchmark.mjs"
   },
   "engines": {
     "node": ">=20.11.0"

@@ -11,17 +11,21 @@ import {createReviewerBAppJwt,createScopedReviewerBInstallationToken}
  from '../candidate/github-app-auth.mjs';
 import {runReadOnlyReviewPreflight} from '../candidate/private-review-preflight.mjs';
 import {executeCompleteLocalSemanticReview} from '../candidate/semantic-bounded-shards.mjs';
+import {formatSafeReviewPerformance} from '../candidate/review-performance.mjs';
 import {readNativeReviews} from '../candidate/github-review-readback.mjs';
 import {assessNativeReviewUniqueness} from '../candidate/native-review-uniqueness.mjs';
 const REPO='deenkids7-dev/deenkids';
 const PUB='devfactory-reviewer-trust/devfactory-reviewer-b-publisher';
 const MODEL='qwen2.5-coder:7b',BOT_ID=340237276,BOT='devfactory-reviewer-b[bot]';
 const SHA40=/^[0-9a-f]{40}$/,SHA64=/^[0-9a-f]{64}$/;
+// Every local shard is independently bounded to <=50 findings. A complete
+// authenticated multi-shard review can legitimately exceed that per-shard cap.
+const MAX_AGGREGATED_FINDINGS=128;
 const WORKFLOW=PUB+'/.github/workflows/reviewer-b-private-semantic.yml@refs/heads/main';
 const digest=x=>createHash('sha256').update(x).digest('hex');
 function deny(code){throw Error(code);}
 function fail(code){return Object.freeze({ok:false,code});}
-const SAFE_DIAGNOSTIC_CODES=new Set(["LOCAL_MODEL_REQUEST_FAILED","LOCAL_MODEL_REQUEST_TIMEOUT","LOCAL_MODEL_RESPONSE_REJECTED","LOCAL_MODEL_ENDPOINT_UNVERIFIED","LOCAL_MODEL_INVALID_JSON","LOCAL_MODEL_RESPONSE_OVERSIZED","LOCAL_MODEL_ENCODING_INVALID","LOCAL_MODEL_DIFF_SCOPE_MISMATCH","OLLAMA_COMPLETION_UNVERIFIED","OLLAMA_OUTPUT_TRUNCATED","OLLAMA_CONTEXT_CAPACITY_UNVERIFIED","OLLAMA_CONTEXT_LIMIT_EXCEEDED","OLLAMA_INVALID_JSON","OLLAMA_FINDINGS_SCHEMA_INVALID","OLLAMA_FINDING_PATH_MISMATCH","OLLAMA_FINDING_LINE_INVALID","OLLAMA_FINDING_NOT_ADDED_LINE","OLLAMA_FINDING_DUPLICATE","SEMANTIC_SHARD_SOURCE_INVALID","SEMANTIC_SHARD_SCOPE_MISMATCH","SEMANTIC_SHARD_FILE_MISMATCH","SEMANTIC_SHARD_BAD_SOURCE_LINE","SEMANTIC_BATCH_INVALID_REPORT","SEMANTIC_BATCH_DUPLICATE_FINDING","SEMANTIC_BATCH_INCOMPLETE","DIFF_DELETION_ONLY_UNANCHORED","STATIC_FINDINGS_BLOCK","REAL_SEMANTIC_PROOF_INVALID","REAL_SEMANTIC_PRIVATE_REPORT_OVERSIZED","REAL_SEMANTIC_REPORT_MISMATCH","SEMANTIC_POST_FAILED","SEMANTIC_POST_REJECTED","SEMANTIC_POST_UNVERIFIED","SEMANTIC_READBACK_INVALID","SEMANTIC_ALREADY_REVIEWED","APP_AUTH_API_REQUEST_FAILED","APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED","PREFLIGHT_DIFF_MISMATCH","READ_PROOF_FAILED","REVIEW_REQUEST_HEAD_CHANGED"]);
+const SAFE_DIAGNOSTIC_CODES=new Set(["LOCAL_MODEL_REQUEST_FAILED","LOCAL_MODEL_TRANSPORT_INTERRUPTED","LOCAL_MODEL_REQUEST_TIMEOUT","LOCAL_MODEL_RESPONSE_REJECTED","LOCAL_MODEL_ENDPOINT_UNVERIFIED","LOCAL_MODEL_INVALID_JSON","LOCAL_MODEL_RESPONSE_OVERSIZED","LOCAL_MODEL_ENCODING_INVALID","LOCAL_MODEL_DIFF_SCOPE_MISMATCH","OLLAMA_COMPLETION_UNVERIFIED","OLLAMA_OUTPUT_TRUNCATED","OLLAMA_CONTEXT_CAPACITY_UNVERIFIED","OLLAMA_CONTEXT_LIMIT_EXCEEDED","OLLAMA_INVALID_JSON","OLLAMA_FINDINGS_SCHEMA_INVALID","OLLAMA_FINDING_PATH_MISMATCH","OLLAMA_FINDING_LINE_INVALID","OLLAMA_FINDING_NOT_ADDED_LINE","OLLAMA_FINDING_DUPLICATE","SEMANTIC_SHARD_SOURCE_INVALID","SEMANTIC_SHARD_SCOPE_MISMATCH","SEMANTIC_SHARD_FILE_MISMATCH","SEMANTIC_SHARD_BAD_SOURCE_LINE","SEMANTIC_BATCH_INVALID_REPORT","SEMANTIC_BATCH_DUPLICATE_FINDING","SEMANTIC_BATCH_INCOMPLETE","DIFF_DELETION_ONLY_UNANCHORED","STATIC_FINDINGS_BLOCK","REAL_SEMANTIC_PROOF_INVALID","REAL_SEMANTIC_PRIVATE_REPORT_OVERSIZED","REAL_SEMANTIC_REPORT_MISMATCH","SEMANTIC_POST_FAILED","SEMANTIC_POST_REJECTED","SEMANTIC_POST_UNVERIFIED","SEMANTIC_READBACK_INVALID","SEMANTIC_ALREADY_REVIEWED","APP_AUTH_API_REQUEST_FAILED","APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED","PREFLIGHT_DIFF_MISMATCH","READ_PROOF_FAILED","REVIEW_REQUEST_HEAD_CHANGED"]);
 const SAFE_STAGES=new Set(['TOKEN_READ','PRIVATE_PREFLIGHT','LOCAL_MODEL','PRIVATE_REPORT','TOKEN_READ_REFRESH','TOKEN_WRITE','NATIVE_POST']);
 /** PUBLIC log may contain ONLY a static stage plus an exact audited code.
  * Never print error strings, HTTP payloads, stack traces, PRIVATE source,
@@ -92,7 +96,8 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
    report.run_id!==runId||typeof report.summary!=='string'||
    !report.summary.trim()||report.summary.length>2000||
    !Array.isArray(report.findings)||
-   report.findings.length!==local.findingCount||report.findings.length>50||
+   report.findings.length!==local.findingCount||
+   report.findings.length>MAX_AGGREGATED_FINDINGS||
    (local.provisionalState==='FAIL'&&report.findings.length===0))
    deny('REAL_SEMANTIC_REPORT_MISMATCH');
  // Deterministic security violations cannot be waived by generic owner
@@ -175,6 +180,45 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
        ' of '+report.findings.length+' authentic local Qwen findings listed;'+
        ' messages and evidence abbreviated. Full canonical report is bound by SHA-256 above.',
        ...compact,'',
+       'Manual verification required. This native COMMENTED report has no independent',
+       'attestation, reviewer PASS, HUMAN_GO, MERGE_GO or merge authorization.'
+     ].join('\n');
+     if(body.length<=12000)break;
+   }
+ }
+ if(body.length>12000 && report.findings.length){
+   // Exhaustive reviews may repeat the same long authenticated file path
+   // dozens of times. A path legend is an exact, lossless representation of
+   // each path; every finding retains its number, severity, line, side and
+   // a readable excerpt of BOTH the claim and its evidence.
+   const safeSummary='Model summary: '+text(report.summary,2000);
+   const opening=bodyLines.slice(0,bodyLines.indexOf(safeSummary));
+   const paths=[...new Set(report.findings.map(f=>f.path))];
+   const pathIDs=new Map(paths.map((path,i)=>[path,i+1]));
+   const legend=paths.map((path,i)=>'P'+(i+1)+': '+text(path,300));
+   // Sanitize only once before trying successively shorter excerpts.
+   // There is no loss of findings or path identity.
+   const sanitized=report.findings.map(f=>({
+     severity:f.severity.toUpperCase(),
+     pathID:pathIDs.get(f.path),line:f.line,
+     sideStr:f.side==='OLD'?' [REMOVED/OLD]':
+       f.side==='NEW'?' [ADDED/NEW]':'',
+     message:text(f.message,500),evidence:text(f.evidence,1000)
+   }));
+   for(const cap of [60,40,24,12,8]){
+     const concise=safe=>safe.length>cap?safe.slice(0,cap-1)+'…':safe;
+     const compact=sanitized.map((f,i)=>'- #'+(i+1)+' '+
+       f.severity+' P'+f.pathID+':'+f.line+f.sideStr+
+       ' — '+concise(f.message)+
+       ' | Evidence: '+concise(f.evidence));
+     body=[...opening,
+       safeSummary,'',
+       'COMPLETE COMPACT FINDING INDEX: '+report.findings.length+
+       ' of '+report.findings.length+
+       ' authentic Qwen findings listed with exact file-path legend, line'+
+       ' and severity; claim/evidence excerpts abbreviated.'+
+       ' Full canonical report SHA-256 is above.',
+       ...legend,'',...compact,'',
        'Manual verification required. This native COMMENTED report has no independent',
        'attestation, reviewer PASS, HUMAN_GO, MERGE_GO or merge authorization.'
      ].join('\n');
@@ -319,8 +363,20 @@ export async function executeProtectedRealSemanticReview({
    const writer=await createScopedReviewerBInstallationToken({
      appJwt:writerJwt,purpose:'publish',now:writerNow,fetchImpl});
    stage='NATIVE_POST';
-   return await publishRealSemanticComment({plan,readToken:refreshedRead.token,
+   const published=await publishRealSemanticComment({plan,readToken:refreshedRead.token,
      writeToken:writer.token,approvedProtectedPublication:true,fetchImpl});
+   // Metrics only after exact native COMMENTED readback. Never print private
+   // source, per-file telemetry, prompt, response, token or attacker input.
+   if(published.ok===true){
+     try{
+       const safeLine=formatSafeReviewPerformance(local.safePerformance);
+       if(safeLine)console.log(safeLine);
+     }catch{
+       // Never fail a successfully verified native COMMENTED publication
+       // because an optional performance observation was unavailable.
+     }
+   }
+   return published;
  }catch(error){
    return fail(classifyProtectedReviewFailure(stage,error));
  }

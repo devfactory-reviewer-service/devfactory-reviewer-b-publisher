@@ -381,3 +381,58 @@ test('experimental Qwen 3.5 9B stays PUBLIC synthetic-only and strict fail-close
  assert.match(yaml,/^\s*contents:\s*read\s*$/m);
  assert.doesNotMatch(yaml,/secrets\.|pull_request_target|contents:\s*write/);
 });
+
+test('RunPod 35B is benchmark-only, uses fixed synthetic diffs and preserves native-release denial',async()=>{
+ const model='qwen3.6:35b-a3b-coding';
+ const f=mock({model});
+ const result=await runSyntheticLocalOllamaBenchmark({
+   fetchImpl:f.fetchImpl,model
+ });
+ assert.equal(f.calls.length,12);
+ assert.equal(result.model,model);
+ assert.equal(result.testsCompleted,12);
+ assert.equal(result.modelQualityCertified,false);
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.privateSourceReviewed,false);
+ assert.equal(result.independentReviewerProvenanceVerified,false);
+ assert.equal(result.publishEvent,null);
+ assert.ok(result.performanceMetrics.wall_seconds>=0);
+ assert.ok(result.performanceMetrics.request_p95_seconds>=0);
+ assert.equal(result.performanceMetrics.requests,12);
+ assert.equal(result.performanceMetrics.gpu_residency_verified,false);
+ assert.equal(result.performanceMetrics.ollama_reported_tokens_per_second,null);
+ for(const call of f.calls){
+   assert.equal(call.url,'http://127.0.0.1:11434/api/chat');
+   assert.equal(JSON.parse(call.config.body).model,model);
+   assert.equal(JSON.parse(call.config.body).keep_alive,'5m');
+   assert.doesNotMatch(call.config.body,/GITHUB_TOKEN|PRIVATE KEY|ghp_/);
+ }
+ const production=requireProductionWorkflow();
+ assert.match(production,/REVIEWER_B_EXPECTED_MODEL: 'qwen2\.5-coder:7b'/);
+ assert.doesNotMatch(production,/qwen3\.6:35b-a3b-coding/);
+});
+function requireProductionWorkflow(){
+ return readFileSync(new URL('../.github/workflows/reviewer-b-private-semantic.yml',import.meta.url),'utf8');
+}
+
+test('RunPod 35B holdout uses unseen synthetic cases and never promotes a clean model to PASS',async()=>{
+ const model='qwen3.6:35b-a3b-coding';
+ const f=mock({model});
+ const result=await runSyntheticLocalOllamaBenchmark({
+   fetchImpl:f.fetchImpl,model,fixtureSet:'holdout'
+ });
+ assert.equal(result.model,model);
+ assert.equal(result.fixtureSet,'holdout');
+ assert.equal(result.testsCompleted,12);
+ assert.equal(f.calls.length,12);
+ assert.equal(result.modelQualityCertified,false);
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.privateSourceReviewed,false);
+ assert.equal(result.independentReviewerProvenanceVerified,false);
+ assert.equal(result.publishEvent,null);
+ assert.equal(result.performanceMetrics.requests,12);
+ for(const call of f.calls){
+   assert.equal(call.url,ENDPOINT);
+   assert.equal(JSON.parse(call.config.body).model,model);
+ }
+});

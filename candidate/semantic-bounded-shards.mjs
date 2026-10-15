@@ -8,6 +8,8 @@
  */
 import {createHash} from 'node:crypto';
 import {inspect} from 'node:util';
+import {performance} from 'node:perf_hooks';
+import {summarizeSafeReviewPerformance} from './review-performance.mjs';
 import {canonicalJson} from '../src/canonical.mjs';
 import {deriveAddedLinesFromDiff} from './diff-added-lines.mjs';
 import {deriveRemovedLinesFromDiff} from './diff-removed-lines.mjs';
@@ -336,6 +338,7 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
 }={}){
  if(model!==MODEL||typeof runId!=='string'||typeof fetchImpl!=='function')
    deny('SEMANTIC_BATCH_INPUT_INVALID');
+ const reviewStarted=performance.now();
  const routing=planAdaptiveSemanticShards({plan,maxOutputTokens});
  const parts=routing.partitions;
  const original=Buffer.from(plan.privateDiffText,'utf8');
@@ -345,28 +348,57 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
  // fragment; no unchanged source, remote model or new GitHub permission.
  const trustedDeclarationIndex=makeBoundedDiffDeclarationIndex({plan});
  const findings=[],responses=[],seen=new Set();
- let modelCalls=0,attempts=0,transportFallbacks=0,outputFallbacks=0;
+ let modelCalls=0,attempts=0,transportFallbacks=0,outputFallbacks=0,duplicateFallbacks=0;
+ const MAX_TRANSPORT_RECOVERIES=3;
+ const MAX_TRANSPORT_SPLIT_DEPTH=2;
+ const requestDurationsMs=[];
  let coveredOriginalParts=0;
  // Each protected diff part must complete. Length exhaustion can occur on
  // MULTIPLE independent parts, so a single global fallback is insufficient.
  // Bound the entire job and never publish/aggregate a truncated response.
- async function reviewChunk(chunk,allowSplit,tokenBudget=maxOutputTokens){
+ async function reviewChunk(chunk,allowSplit,tokenBudget=maxOutputTokens,transportDepth=0){
    const bytes=chunk.privateDiffBytes;
    const chunkPlan=prepareBoundedSemanticReview({
      snapshot:snapFor(plan,bytes),rawDiffBytes:bytes});
    if(++attempts>128)deny('SEMANTIC_BATCH_ATTEMPT_LIMIT');
    let result;
    try{
-     result=await executeLocalOllamaReview({
-       plan:chunkPlan,trustedDiffBytes:bytes,runId,
-       model,approvedLocalPrivateProcessing:true,
-       protectedEphemeralKeepAlive:true,
-       fetchImpl,maxOutputTokens:tokenBudget,
-       trustedDeclarationIndex,
-       trustedOriginalDiffSha256:parts.originalDiffSha256
-     });
+     const start=performance.now();
+     try{
+       result=await executeLocalOllamaReview({
+         plan:chunkPlan,trustedDiffBytes:bytes,runId,
+         model,approvedLocalPrivateProcessing:true,
+         protectedEphemeralKeepAlive:true,
+         fetchImpl,maxOutputTokens:tokenBudget,
+         trustedDeclarationIndex,
+         trustedOriginalDiffSha256:parts.originalDiffSha256
+       });
+     }finally{
+       // Timings only, no request bytes, path, model response or error string.
+       requestDurationsMs.push(performance.now()-start);
+     }
    }catch(error){
      const code=error?.message;
+     if(code==='OLLAMA_FINDING_DUPLICATE'&&allowSplit){
+       // Reject the ambiguous completion in full. Re-run the ENTIRE exact
+       // authenticated shard as strictly smaller, fully covered fragments.
+       // No finding is dropped, no partial response is published, and a
+       // persistent duplicate on a child remains a hard failure.
+       if(duplicateFallbacks>=8)throw error;
+       let smaller;
+       try{smaller=partitionRealSemanticDiff({
+         plan:chunkPlan,maxChunkBytes:768});}
+       catch{throw error;}
+       if(smaller.originalDiffSha256!==sha(bytes)||
+          smaller.originalByteCount!==bytes.length||
+          smaller.shardCount<2||smaller.shardCount>10||
+          smaller.shards.some(x=>x.byteCount>=bytes.length))
+         throw error;
+       duplicateFallbacks++;
+       for(const part of smaller.shards)
+         await reviewChunk(part,false,tokenBudget);
+       return;
+     }
      if(code==='OLLAMA_OUTPUT_TRUNCATED'&&allowSplit){
        // The only accepted signal is a validated local Ollama length stop.
        // Never reuse partial JSON. Review the COMPLETE original shard as
@@ -396,11 +428,13 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
        }
        throw error;
      }
-     // Preserve the original single global CPU/transport recovery. Invalid
-     // schema, wrong model, drift, arbitrary errors never trigger a retry.
-     if(!allowSplit||transportFallbacks!==0||
-        !['LOCAL_MODEL_REQUEST_FAILED','LOCAL_MODEL_REQUEST_TIMEOUT']
-          .includes(code))throw error;
+     // Allow only bounded, provably smaller exact-diff reanalysis for known
+     // local transport failures. Never accept a partial response. Invalid
+     // schema/model/drift errors remain nonretryable.
+     if(transportFallbacks>=MAX_TRANSPORT_RECOVERIES||
+        transportDepth>=MAX_TRANSPORT_SPLIT_DEPTH||
+        !['LOCAL_MODEL_REQUEST_FAILED','LOCAL_MODEL_REQUEST_TIMEOUT',
+          'LOCAL_MODEL_TRANSPORT_INTERRUPTED'].includes(code))throw error;
      let smaller;
      try{smaller=partitionRealSemanticDiff({
        plan:chunkPlan,maxChunkBytes:768});}
@@ -412,7 +446,7 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
        throw error;
      transportFallbacks++;
      for(const part of smaller.shards)
-       await reviewChunk(part,false,tokenBudget);
+       await reviewChunk(part,false,tokenBudget,transportDepth+1);
      return;
    }
    if(result.localModelExecuted!==true||
@@ -439,8 +473,22 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
    coveredOriginalParts++;
  }
  if(coveredOriginalParts!==parts.shardCount||modelCalls<parts.shardCount||
-    attempts>128||transportFallbacks>1||outputFallbacks>16)
+    attempts>128||transportFallbacks>MAX_TRANSPORT_RECOVERIES||outputFallbacks>16||
+    duplicateFallbacks>8)
    deny('SEMANTIC_BATCH_INCOMPLETE');
+ // Non-authorizing diagnostics MUST NOT make a valid PRIVATE review
+ // fail or prevent a complete canonical report from being published.
+ let safePerformance=null;
+ try{
+   safePerformance=summarizeSafeReviewPerformance({
+     mode:routing.mode,originalParts:parts.shardCount,attempts,
+     completedParts:modelCalls,transportFallbacks,outputFallbacks,
+     duplicateFallbacks,wallMs:performance.now()-reviewStarted,
+     requestDurationsMs,
+   });
+ }catch{
+   // No telemetry is safer than falsely rejecting real reviewed source.
+ }
  const complete=Buffer.from(canonicalJson({
    schema:'devfactory.reviewer-b.findings.v1',
    run_id:runId,
@@ -461,6 +509,7 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
    independentReviewVerified:false,approvalAuthorized:false,publishEvent:null
  };
  Object.defineProperties(result,{
+  safePerformance:{enumerable:false,configurable:false,value:safePerformance},
   privateCanonicalReportBytes:{enumerable:false,configurable:false,
     get:()=>Buffer.from(complete)},
   toJSON:{enumerable:false,configurable:false,

@@ -448,3 +448,21 @@ test('Qwen 3.5 9B candidate is only a local nonauthorizing bounded trial',()=>{
  assert.equal(candidate.privateSourceProcessingAuthorized,false);
  assert.equal(candidate.independentReviewVerified,false);
 });
+
+test('35B cannot enter protected ordinary candidate or response validation without synthetic-only opt-in',()=>{
+ const experimental='qwen3.6:35b-a3b-coding';
+ assert.throws(()=>prepareOfflineOllamaCandidate({plan:plan(),model:experimental}),
+  /OLLAMA_MODEL_OR_CONTEXT_UNSUPPORTED/);
+ const prepared=prepareOfflineOllamaCandidate({
+  plan:plan(),model:experimental,syntheticGpuBenchmark:true
+ });
+ assert.equal(JSON.parse(prepared.privateRequestJson).model,experimental);
+ assert.equal(prepared.approvalAuthorized,false);
+ assert.throws(()=>parse(completion(noIssues,{model:experimental}),{
+  expectedModel:experimental}),/OLLAMA_COMPLETION_UNVERIFIED/);
+ const checked=parse(completion(noIssues,{model:experimental}),{
+  expectedModel:experimental,syntheticGpuBenchmark:true
+ });
+ assert.equal(checked.approvalAuthorized,false);
+ assert.equal(checked.independentReviewVerified,false);
+});

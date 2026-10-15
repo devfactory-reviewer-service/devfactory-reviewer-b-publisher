@@ -153,6 +153,58 @@ test('R69 noisy 47-finding native review contains readable evidence and no autho
  assert.equal(result.approvalAuthorized,false);
  assert.equal(result.independentReviewVerified,false);
 });
+test('R109 complete report with more than 50 findings is still publishable',()=>{
+ const alerts=Array.from({length:65},(_,i)=>({
+  severity:'high',path:'src/a.mjs',line:4,
+  message:'Concrete synthetic issue '+i+' '+('m'.repeat(390)),
+  evidence:'Verified synthetic failing input '+i+' '+('e'.repeat(690)),
+  fingerprint:i.toString(16).padStart(64,'0')
+ }));
+ const bytes=report(alerts);
+ assert.ok(bytes.length<96*1024);
+ const result=prepareRealSemanticComment({
+  preflight:preflight(),local:local(alerts),runId:RUN
+ });
+ assert.equal(result.event,'COMMENT');
+ assert.equal(result.approvalAuthorized,false);
+ assert.ok(result.body.length<=12000);
+ assert.match(result.body,/65 of 65 authentic local Qwen findings listed/);
+ for(let i=0;i<65;i++)assert.ok(result.body.includes('- #'+(i+1)+' '));
+ assert.match(result.body,/Real local report SHA-256/);
+});
+test('R109 path legend indexes 128 findings with exact paths and no dropped entry',()=>{
+ const paths=Array.from({length:9},(_,i)=>
+  'src/very-long-authenticated-path-'+i+'-'+('p'.repeat(96))+'.mjs');
+ const alerts=Array.from({length:128},(_,i)=>({
+  severity:i%2===0?'high':'medium',path:paths[i%paths.length],line:i+1,
+  message:'Synthetic issue '+i+' with a specific affected scenario',
+  evidence:'Synthetic input '+i+' causes the wrong branch',
+  fingerprint:i.toString(16).padStart(64,'0')
+ }));
+ const p={...preflight(),privateSemanticPlan:{changedPaths:paths}};
+ const bytes=report(alerts);
+ assert.ok(bytes.length<96*1024);
+ const result=prepareRealSemanticComment({
+  preflight:p,local:local(alerts),runId:RUN
+ });
+ assert.equal(result.event,'COMMENT');
+ assert.ok(result.body.length<=12000);
+ assert.match(result.body,/COMPLETE COMPACT FINDING INDEX: 128 of 128/);
+ for(let i=0;i<128;i++)assert.ok(result.body.includes('- #'+(i+1)+' '));
+ for(let i=0;i<9;i++)assert.ok(result.body.includes('P'+(i+1)+': '+paths[i]));
+ assert.match(result.body,/Evidence:/);
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
+});
+test('R109 excessive report still fails closed instead of silently truncating',()=>{
+ const alerts=Array.from({length:129},(_,i)=>({
+  ...finding(),message:'Synthetic issue '+i,
+  fingerprint:i.toString(16).padStart(64,'0')
+ }));
+ assert.throws(()=>prepareRealSemanticComment({
+  preflight:preflight(),local:local(alerts),runId:RUN
+ }),/REAL_SEMANTIC_REPORT_MISMATCH/);
+});
 test('oversized full Qwen report remains fail-closed instead of silently dropping findings',()=>{
  const over={...local(),privateCanonicalReportBytes:Buffer.alloc(96*1024+1,65)};
  assert.throws(()=>prepareRealSemanticComment({
@@ -403,9 +455,11 @@ test('R97 a long Qwen analysis refreshes read AND write credentials before nativ
  const scopedRead=src.indexOf("appJwt:refreshedReadJwt,purpose:'reviewRead'",readJwt);
  const writeStage=src.indexOf("stage='TOKEN_WRITE';",scopedRead);
  const writeJwt=src.indexOf('const writerJwt=createReviewerBAppJwt(',writeStage);
- const post=src.indexOf('return await publishRealSemanticComment(',writeJwt);
+ const post=src.indexOf('const published=await publishRealSemanticComment(',writeJwt);
+ const safeLog=src.indexOf('if(published.ok===true)',post);
  assert.ok(model>=0&&prepare>model&&readStage>prepare&&readJwt>readStage&&
-   scopedRead>readJwt&&writeStage>scopedRead&&writeJwt>writeStage&&post>writeJwt);
+   scopedRead>readJwt&&writeStage>scopedRead&&writeJwt>writeStage&&
+   post>writeJwt&&safeLog>post);
  assert.match(src,/const refreshedReadNow=Date\.now\(\);/);
  assert.match(src,/appJwt:refreshedReadJwt,purpose:'reviewRead',now:refreshedReadNow,fetchImpl/);
  assert.match(src,/publishRealSemanticComment\(\{plan,readToken:refreshedRead\.token,/);

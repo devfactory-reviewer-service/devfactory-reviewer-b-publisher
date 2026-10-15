@@ -59,6 +59,19 @@ function mockModel({high=false,failAt=-1}={}){
  };
  return {fetchImpl,count:()=>calls,seen};
 }
+test('performance summary exists only as redacted non-authorizing metadata',async()=>{
+ const out=await executeCompleteLocalSemanticReview({
+   plan:plan(),runId:RUN,fetchImpl:mockModel().fetchImpl
+ });
+ assert.equal(out.safePerformance.schema,'reviewer_b_safe_performance_v1');
+ assert.equal(out.safePerformance.attempts,out.safePerformance.completed_parts);
+ assert.ok(out.safePerformance.model_seconds>=0);
+ assert.equal(Object.keys(out).includes('safePerformance'),false);
+ assert.equal(out.approvalAuthorized,false);
+ assert.equal(out.independentReviewVerified,false);
+ assert.doesNotMatch(JSON.stringify(out),/safePerformance|changed_0_xxx/);
+ assert.doesNotMatch(inspect(out),/safePerformance|changed_0_xxx/);
+});
 test('every NEW-side line is represented in valid standalone local shards',()=>{
  const p=partitionRealSemanticDiff({plan:plan(),maxChunkBytes:768});
  assert.equal(p.rawByteCoverageProven,true);
@@ -172,6 +185,155 @@ test('one transient LOCAL failure is recovered by complete smaller authenticated
  assert.equal(JSON.stringify(received),
    JSON.stringify(deriveAddedLinesFromDiff({diffBytes:diff})));
  assert.doesNotMatch(JSON.stringify(done),/changed_0_xxx/);
+});
+test('duplicate Qwen findings trigger only a complete bounded shard reanalysis',async()=>{
+ const trusted=plan();
+ const baseline=planAdaptiveSemanticShards({plan:trusted}).partitions;
+ const model=mockModel();
+ let requests=0;
+ const fetchImpl=async(url,options)=>{
+   requests++;
+   if(requests===2){
+     const request=JSON.parse(options.body);
+     const scoped=JSON.parse(request.messages[1].content);
+     const anchors=deriveAddedLinesFromDiff({
+       diffBytes:Buffer.from(scoped.untrusted_unified_diff)});
+     const path=Object.keys(anchors)[0];
+     const item={severity:'high',path,line:anchors[path][0],
+       message:'Synthetic duplicated finding',
+       evidence:'Same exact verified location and evidence'};
+     return fakeReply({
+       model:'qwen2.5-coder:7b',done:true,done_reason:'stop',
+       message:{role:'assistant',content:JSON.stringify({
+         summary:'Synthetic duplicate to reject',findings:[item,item]})},
+       prompt_eval_count:800,eval_count:120
+     });
+   }
+   return model.fetchImpl(url,options);
+ };
+ const result=await executeCompleteLocalSemanticReview({
+   plan:trusted,runId:RUN,fetchImpl});
+ assert.ok(requests>baseline.shardCount);
+ assert.equal(result.rawByteCoverageProven,true);
+ assert.equal(result.originalDiffSha256,sha(diff));
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
+ assert.equal(result.findingCount,0);
+ const observed={};
+ for(const item of model.seen){
+   const anchors=deriveAddedLinesFromDiff({diffBytes:item.bytes});
+   (observed[item.path]??=[]).push(...anchors[item.path]);
+ }
+ assert.equal(JSON.stringify(observed),
+   JSON.stringify(deriveAddedLinesFromDiff({diffBytes:diff})));
+});
+test('persistent duplicated findings on subdivided shard still fail closed',async()=>{
+ const bytes=Buffer.from(file('src/alpha.mjs',25));
+ let requests=0;
+ const fetchImpl=async(url,options)=>{
+   requests++;
+   const request=JSON.parse(options.body);
+   const scoped=JSON.parse(request.messages[1].content);
+   const anchors=deriveAddedLinesFromDiff({
+     diffBytes:Buffer.from(scoped.untrusted_unified_diff)});
+   const path=Object.keys(anchors)[0];
+   const item={severity:'medium',path,line:anchors[path][0],
+     message:'Persistent duplicate',evidence:'Same model finding'};
+   return fakeReply({
+     model:'qwen2.5-coder:7b',done:true,done_reason:'stop',
+     message:{role:'assistant',content:JSON.stringify({
+       summary:'Must fail without review',findings:[item,item]})},
+     prompt_eval_count:800,eval_count:120
+   });
+ };
+ await assert.rejects(()=>executeCompleteLocalSemanticReview({
+   plan:plan(bytes),runId:RUN,fetchImpl}),/OLLAMA_FINDING_DUPLICATE/);
+ assert.ok(requests>=2);
+ assert.ok(requests<=11);
+});
+test('explicit local socket interruption reanalyses one full authenticated shard',async()=>{
+ const trusted=plan();
+ const baseline=planAdaptiveSemanticShards({plan:trusted}).partitions;
+ const model=mockModel();
+ let attempts=0;
+ const fetchImpl=async(url,options)=>{
+   attempts++;
+   if(attempts===2){
+     const e=new TypeError('simulated local network failure');
+     e.cause={code:'ECONNRESET'};
+     throw e;
+   }
+   return model.fetchImpl(url,options);
+ };
+ const done=await executeCompleteLocalSemanticReview({
+   plan:trusted,runId:RUN,fetchImpl});
+ assert.ok(attempts>baseline.shardCount);
+ assert.ok(attempts<=128);
+ assert.equal(done.originalDiffSha256,sha(diff));
+ assert.equal(done.rawByteCoverageProven,true);
+ assert.equal(done.approvalAuthorized,false);
+ assert.equal(done.independentReviewVerified,false);
+ assert.equal(done.findingCount,0);
+ const observed={};
+ for(const item of model.seen){
+   const anchors=deriveAddedLinesFromDiff({diffBytes:item.bytes});
+   (observed[item.path]??=[]).push(...anchors[item.path]);
+ }
+ assert.equal(JSON.stringify(observed),
+   JSON.stringify(deriveAddedLinesFromDiff({diffBytes:diff})));
+});
+test('two independent interrupted parts are completely reanalyzed, not silently omitted',async()=>{
+ const fullDiff=Buffer.from(paths.map(p=>file(p,65)).join(''));
+ const trusted=plan(fullDiff);
+ const baseline=planAdaptiveSemanticShards({plan:trusted}).partitions;
+ const model=mockModel();
+ let attempts=0;
+ const failedLarge=new Set();
+ const fetchImpl=async(url,options)=>{
+   attempts++;
+   const input=JSON.parse(JSON.parse(options.body).messages[1].content);
+   const bytes=Buffer.from(input.untrusted_unified_diff);
+   const fingerprint=sha(bytes);
+   // Fail two DIFFERENT original-size authenticated parts, not a child.
+   if(bytes.length>768&&failedLarge.size<2&&!failedLarge.has(fingerprint)){
+     failedLarge.add(fingerprint);
+     const e=new TypeError('local socket disrupted');
+     e.cause={code:'ECONNRESET'};
+     throw e;
+   }
+   return model.fetchImpl(url,options);
+ };
+ const result=await executeCompleteLocalSemanticReview({
+   plan:trusted,runId:RUN,fetchImpl
+ });
+ assert.equal(result.rawByteCoverageProven,true);
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
+ assert.ok(result.processedShardCount>=baseline.shardCount);
+ assert.ok(attempts<=128);
+ const expected=deriveAddedLinesFromDiff({diffBytes:fullDiff});
+ const actual={};
+ for(const item of model.seen){
+   const anchors=deriveAddedLinesFromDiff({diffBytes:item.bytes});
+   (actual[item.path]??=[]).push(...anchors[item.path]);
+ }
+ assert.equal(JSON.stringify(actual),JSON.stringify(expected));
+ assert.equal(result.safePerformance.transport_fallbacks,2);
+});
+test('repeated transport interruptions fail closed without publishing partial findings',async()=>{
+ const bytes=Buffer.from(file('src/alpha.mjs',25));
+ let attempts=0;
+ const fetchImpl=async()=>{
+   attempts++;
+   const e=new TypeError('simulated local network failure');
+   e.cause={code:'EPIPE'};
+   throw e;
+ };
+ await assert.rejects(()=>executeCompleteLocalSemanticReview({
+   plan:plan(bytes),runId:RUN,fetchImpl
+ }),/LOCAL_MODEL_TRANSPORT_INTERRUPTED/);
+ assert.ok(attempts>=2);
+ assert.ok(attempts<=11);
 });
 test('one Ollama output-budget exhaustion reanalyzes entire trusted shard in smaller pieces',async()=>{
  const trusted=plan();
