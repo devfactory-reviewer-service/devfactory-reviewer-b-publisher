@@ -69,18 +69,19 @@ export async function withProtectedReviewerBGpuTunnel({
    return DENY('GPU_TUNNEL_CALLER_INVALID');
  const plan=planReviewerBProtectedGpuTunnel(guardInputs);
  if(!plan.ok)return DENY(plan.reason);
- let child,ran=false;
+ let child,ran=false,spawnFailed=false;
  try{
   child=spawnImpl(plan.executable,plan.args,{
     stdio:'ignore',shell:false,detached:false,
     env:{PATH:process.env.PATH||'/usr/bin:/bin',HOME:process.env.HOME||'/home/runner'},
   });
-  if(!child||typeof child.kill!=='function')
+  if(!child||typeof child.kill!=='function'||typeof child.on!=='function')
    return DENY('GPU_SSH_LAUNCH_INVALID');
+  child.on('error',()=>{spawnFailed=true});
   const start=Date.now();
   let resident;
   while(Date.now()-start<startTimeoutMs){
-    if(child.exitCode!==null&&child.exitCode!==undefined)
+    if(spawnFailed||child.exitCode!==null&&child.exitCode!==undefined)
       return DENY('GPU_SSH_TUNNEL_EXITED');
     resident=await probe(fetchImpl);
     if(resident.ok)break;
@@ -90,8 +91,10 @@ export async function withProtectedReviewerBGpuTunnel({
   // Only the single protected Publisher review function may ingest PRIVATE
   // source after full runtime tunnel proof. Never pass App keys to subprocess.
   ran=true;
-  await reviewFn({endpoint:plan.endpoint,model:MODEL,podId:plan.podId});
-  return Object.freeze({ok:true,code:'GPU_PRIVATE_REVIEW_FUNCTION_FINISHED',
+  const result=await reviewFn({endpoint:plan.endpoint,model:MODEL,podId:plan.podId});
+  if(result?.ok!==true||result.code!=='REAL_REVIEW_COMMENT_VERIFIED')
+   return DENY('GPU_PRIVATE_REVIEW_NATIVE_COMMENT_NOT_VERIFIED');
+  return Object.freeze({ok:true,code:'GPU_PRIVATE_REVIEW_NATIVE_COMMENT_VERIFIED',
     reviewAttempted:true,mayPublishReview:false,mayMerge:false});
  }catch{
   return DENY(ran?'GPU_PRIVATE_REVIEW_FAILED_CLOSED':'GPU_TUNNEL_FAILED_CLOSED');
