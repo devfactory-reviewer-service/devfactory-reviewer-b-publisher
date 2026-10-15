@@ -1,0 +1,52 @@
+name: RunPod GPU - owner-gated READ ONLY Pod preflight
+
+# Manual on protected Publisher main only. No PR, push, issue-comment or
+# scheduled triggers. NEVER starts, stops, creates or bills a GPU.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: runpod-readonly-preflight-manual
+  cancel-in-progress: false
+
+jobs:
+  exact-pod-status:
+    name: Authenticated RunPod GET - exact Pod only (no mutation)
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'workflow_dispatch' }}
+    environment: runpod-gpu-preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Load exact protected PUBLIC Publisher code before loading secrets
+        shell: bash
+        env:
+          PUBLISHER_REPO: ${{ github.repository }}
+          PUBLISHER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$PUBLISHER_REPO" = 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher'
+          [[ "$PUBLISHER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          mkdir -p source
+          curl --fail --silent --show-error --location --retry 2 \
+            --proto '=https' --proto-redir '=https' \
+            --max-time 45 --max-filesize 8388608 \
+            "https://api.github.com/repos/${PUBLISHER_REPO}/tarball/${PUBLISHER_SHA}" \
+            --output "$RUNNER_TEMP/runpod-readonly-publisher.tar.gz"
+          tar -xzf "$RUNNER_TEMP/runpod-readonly-publisher.tar.gz" \
+            -C source --strip-components=1
+          test -f source/scripts/runpod-gpu-readonly-preflight.mjs
+          test -f source/test/runpod-gpu-readonly-preflight.test.mjs
+          node --test source/test/runpod-gpu-readonly-preflight.test.mjs
+      - name: Authenticated read-only GET of EXACT stopped Pod
+        shell: bash
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+        run: |
+          set -euo pipefail
+          if test -z "${RUNPOD_API_KEY:-}"; then
+            echo 'GPU_RUNPOD_API_KEY_NOT_CONFIGURED'
+            exit 1
+          fi
+          node source/scripts/runpod-gpu-readonly-preflight.mjs --read-only
