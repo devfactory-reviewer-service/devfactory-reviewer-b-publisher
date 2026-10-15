@@ -57,7 +57,7 @@ test('R147 refuses redirect, external URL, MIME, status and oversized reply',asy
 test('R147 never uses caller-selected model, provider or leaked errors',async()=>{
  let calls=0;
  await assert.rejects(()=>verifyPublicGpuResidency({
-  model:'qwen2.5-coder:7b',fetchImpl:async()=>{calls++;return response([good]);}
+  model:'qwen3.5:9b',fetchImpl:async()=>{calls++;return response([good]);}
  }),/GPU_RESIDENCY_MODEL_UNTRUSTED/);
  assert.equal(calls,0);
  await assert.rejects(()=>verifyPublicGpuResidency({
