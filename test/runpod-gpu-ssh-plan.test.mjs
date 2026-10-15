@@ -55,7 +55,7 @@ test('no quote, unverified host, or missing independent stop prevents bridge',()
  {knownHostsPath:'/dev/null'},
  {knownHostsPath:'/home/owner/.ssh/runpod-dedicated'},
  {budgetQuote:{}},
- {budgetQuote:{...quote,spentToDateEur:9}},
+ {budgetQuote:{...quote,spentToDateEur:11.8}},
  {budgetQuote:{...quote,independentlyEnforcedStop:false}},
  {externalProviderStopProof:false},
  {providerPortExposureVerified:false}
