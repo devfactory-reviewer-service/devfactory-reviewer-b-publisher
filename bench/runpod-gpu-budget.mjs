@@ -1,10 +1,13 @@
 /**
  * Strictly nonauthorizing RunPod GPU spend preflight.
  * No API, cloud token, private diff, pod creation/resume or provider changes.
+ * The owner-approved monthly target is 15 EUR inclusive of storage, with
+ * a 12 EUR operating envelope and 3 EUR reserve. This is NOT an enforced
+ * RunPod account spend cap, and never allows a billed Pod action by itself.
  * A quote is NOT an actual bill; this cannot guarantee an account-level cap.
  */
-const MAX_MONTHLY_EUR=10;
-const OPERATING_ENVELOPE_EUR=8;
+const MAX_MONTHLY_EUR=15;
+const OPERATING_ENVELOPE_EUR=12;
 const RUNPOD_POD_ID='ao1z73um41h61i';
 const validMoney=x=>typeof x==='number'&&Number.isFinite(x)&&x>=0&&x<=10000;
 const deny=reason=>Object.freeze({
@@ -37,7 +40,7 @@ export function planBoundedRunPodGpuTest({
     (providerGpuEurPerHour+providerStorageEurPerHour)*(proposedMinutes/60);
   if(!Number.isFinite(conservativeEur)||
     conservativeEur>OPERATING_ENVELOPE_EUR+1e-9)
-    return deny('GPU_EIGHT_EURO_OPERATING_ENVELOPE_EXCEEDED');
+    return deny('GPU_TWELVE_EURO_OPERATING_ENVELOPE_EXCEEDED');
   return Object.freeze({
     ok:true,
     podId,proposedMinutes,
