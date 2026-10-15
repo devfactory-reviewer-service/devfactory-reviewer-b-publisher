@@ -7,7 +7,7 @@
 import path from 'node:path';
 import {planBoundedRunPodGpuTest} from './runpod-gpu-budget.mjs';
 
-const POD='65d120da1098';
+const POD='ao1z73um41h61i';
 const MODEL='qwen3.6:35b-a3b-coding';
 const reject=reason=>Object.freeze({
   ok:false,reason,canReviewPrivateCode:false,mayStartPod:false,

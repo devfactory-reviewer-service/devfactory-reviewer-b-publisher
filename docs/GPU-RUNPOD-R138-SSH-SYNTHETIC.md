@@ -4,10 +4,12 @@
 
 ## Status and identities
 
-- RunPod Pod: `65d120da1098`, previously validated RTX A6000 48 GB,
-  Ollama 0.40.4 and `qwen3.6:35b-a3b-coding` fully GPU resident in
-  3 short synthetic completions (56–73 output tokens/s). This does NOT
-  constitute a 12-fixture quality or actual PR latency result.
+- Current RunPod Pod: `ao1z73um41h61i`, identified in the owner's
+  15 October dashboard: stopped RTX A6000 48 GB, $0.59/hour compute
+  upon start. The earlier RTX A6000 GPU / Ollama 0.40.4 / 35B benchmark
+  (56–73 output tokens/s) concerned Pod ID `65d120da1098`.
+  **It does not prove the current Pod contains the same Ollama model,
+  installed dependencies, endpoint or benchmark performance.**
 - Existing R135 synthetic quality and Euro cost planner are reused.
 - As of the R138 owner MSI read-only inventory, there is no
   `RUNPOD_API_KEY`, live GPU quote/billing snapshot, current provider TCP
@@ -45,7 +47,7 @@ Keep this JSON in an owner-private local file, never in GitHub:
 
 ```json
 {
-  "podId": "65d120da1098",
+  "podId": "ao1z73um41h61i",
   "host": "YOUR_VERIFIED_PROVIDER_TCP_HOST",
   "port": 22222,
   "sshPrivateKeyPath": "/home/owner/.ssh/devfactory_runpod_reviewer_b_20261014",

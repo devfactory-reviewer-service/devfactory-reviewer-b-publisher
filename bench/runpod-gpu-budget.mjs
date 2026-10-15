@@ -5,7 +5,7 @@
  */
 const MAX_MONTHLY_EUR=10;
 const OPERATING_ENVELOPE_EUR=8;
-const RUNPOD_POD_ID='65d120da1098';
+const RUNPOD_POD_ID='ao1z73um41h61i';
 const validMoney=x=>typeof x==='number'&&Number.isFinite(x)&&x>=0&&x<=10000;
 const deny=reason=>Object.freeze({
   ok:false,reason,mayResumePod:false,mayHandlePrivateCode:false,

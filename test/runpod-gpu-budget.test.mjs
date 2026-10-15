@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {planBoundedRunPodGpuTest} from '../bench/runpod-gpu-budget.mjs';
 const quote={
-  podId:'65d120da1098',
+  podId:'ao1z73um41h61i',
   spentToDateEur:1,
   providerGpuEurPerHour:0.75,
   providerStorageEurPerHour:0.08,
@@ -31,6 +31,7 @@ test('a missing verified provider bill or stop watchdog denies cloud spend',()=>
   {availableEuroBalanceVerified:false},
   {independentlyEnforcedStop:false},
   {podId:'foreign'},
+  {podId:'65d120da1098'}, // previously tested Pod is NOT today's Pod
   {proposedMinutes:0},
   {proposedMinutes:61},
   {spentToDateEur:7.99},

@@ -6,9 +6,12 @@ HUMAN_GO, MERGE_GO, source permission change, or an independent GPU review.
 
 ## Existing verified hardware, and what is NOT proven
 
-- Existing RunPod Pod ID: `65d120da1098`. RTX A6000 48GB;
-  Ollama `0.40.4`; installed `qwen3.6:35b-a3b-coding`.
-- On 14 October the isolated owner-controlled Pod generated 3/3 short
+- Current owner RunPod Pod ID shown in the 15 October console screenshot:
+  `ao1z73um41h61i`, stopped, RTX A6000 48 GB, quoted $0.59/hour
+  when restarted. The previously benchmarked Pod ID was
+  `65d120da1098`; **do not assume** it is the same instance or that
+  yesterday's Ollama binaries/model persisted in the current Pod.
+- On 14 October the previously tested owner-controlled Pod generated 3/3 short
   synthetic completions at approximately 56–73 output tokens/s and 3.1–7.7s
   elapsed. `ollama ps` reported 100% GPU. This is **not** a Reviewer B
   diff benchmark or a 50-part independent security acceptance trial.

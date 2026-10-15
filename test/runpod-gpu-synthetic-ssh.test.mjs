@@ -8,7 +8,7 @@ import {
  runPublicSyntheticPinnedTunnel
 } from '../bench/runpod-gpu-synthetic-ssh.mjs';
 const inputs=()=>({
- podId:'65d120da1098',host:'gpu-tcp.runpod.net',port:21053,
+ podId:'ao1z73um41h61i',host:'gpu-tcp.runpod.net',port:21053,
  sshPrivateKeyPath:'/home/test/.ssh/id_runpod',
  knownHostsPath:'/home/test/.ssh/known_hosts',
  model:'qwen3.6:35b-a3b-coding',

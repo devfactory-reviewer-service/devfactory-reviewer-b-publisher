@@ -10,7 +10,7 @@ const quote=Object.freeze({
  availableEuroBalanceVerified:true
 });
 const options=()=>({
- podId:'65d120da1098',
+ podId:'ao1z73um41h61i',
  host:'gpu-tcp.runpod.net',port:21053,
  sshPrivateKeyPath:'/home/owner/.ssh/runpod-dedicated',
  knownHostsPath:'/home/owner/.ssh/known_hosts_runpod',
@@ -40,6 +40,7 @@ test('synthetic-only bridge uses pinned strict SSH, loopback Ollama and no remot
 test('no quote, unverified host, or missing independent stop prevents bridge',()=>{
  const invalid=[
  {podId:'foreign'},
+ {podId:'65d120da1098'}, // never reuse old Pod identity
  {model:'qwen2.5-coder:7b'},
  {host:'localhost'},
  {host:'127.0.0.1'},
