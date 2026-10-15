@@ -1,0 +1,40 @@
+name: RunPod CONTROL - read-only stopped Pod startup diagnostic
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  exact-stopped-pod-diagnostic:
+    name: Owner-gated bounded metadata inspection (no RunPod mutations)
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'issue_comment' && github.event.action == 'created' && github.event.issue.number == 52 && !github.event.issue.pull_request && github.event.comment.body == 'DEVFACTORY_RUNPOD_DIAGNOSTICS_R165' }}
+    environment: runpod-gpu-control
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Load protected Publisher main code and run regression before secret
+        shell: bash
+        env:
+          PUBLISHER_REPO: ${{ github.repository }}
+          PUBLISHER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$PUBLISHER_REPO" = 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher'
+          [[ "$PUBLISHER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          mkdir -p source
+          curl --fail --silent --show-error --location --retry 2 \
+            --proto '=https' --proto-redir '=https' --max-time 45 --max-filesize 8388608 \
+            "https://api.github.com/repos/${PUBLISHER_REPO}/tarball/${PUBLISHER_SHA}" \
+            --output "$RUNNER_TEMP/runpod-r165-diag.tar.gz"
+          tar -xzf "$RUNNER_TEMP/runpod-r165-diag.tar.gz" -C source --strip-components=1
+          node --test source/test/runpod-control-readonly-diagnostics.test.mjs
+      - name: Query exact Pod machine and credit indicators (sanitized)
+        shell: bash
+        env:
+          RUNPOD_CONTROL_API_KEY: ${{ secrets.RUNPOD_CONTROL_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${RUNPOD_CONTROL_API_KEY:-}"
+          node source/scripts/runpod-control-readonly-diagnostics.mjs --read-only
