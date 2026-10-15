@@ -32,6 +32,33 @@ test('no workflow has access to private App secrets, write token or privileged t
     // Permit exactly one root permissions mapping; reject ANY nested one.
     assert.equal((contents.match(/^permissions\s*:/gm)||[]).length,1);
     assert.doesNotMatch(contents,/^[ \t]+permissions\s*:/m);
+    if(filename==='runpod-control-readonly-scope-test.yml'){
+      // CONTROL secret is extraordinarily sensitive, even in a GET-only
+      // GraphQL query. Accept ONLY the exact owner-approved isolated lane.
+      assert.match(contents,/^on:\n  issue_comment:\n    types: \[created\]\n/m);
+      assert.match(contents,/^permissions: \{\}\n/m);
+      assert.match(contents,/^concurrency:\n  group: runpod-control-scope-test\n  cancel-in-progress: false\n/m);
+      assert.match(contents,/environment:\s*runpod-gpu-control/);
+      assert.match(contents,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
+      assert.match(contents,/github\.ref == 'refs\/heads\/main'/);
+      assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/);
+      assert.match(contents,/github\.event_name == 'issue_comment'/);
+      assert.match(contents,/github\.event\.action == 'created'/);
+      assert.match(contents,/github\.event\.issue\.number == 52/);
+      assert.match(contents,/!github\.event\.issue\.pull_request/);
+      assert.match(contents,/github\.event\.comment\.body == 'DEVFACTORY_RUNPOD_CONTROL_PREFLIGHT_R161'/);
+      assert.equal((contents.match(/secrets\./g)||[]).length,1);
+      assert.match(contents,/secrets\.RUNPOD_CONTROL_API_KEY/);
+      assert.equal((contents.match(/^      - name:/gm)||[]).length,2);
+      assert.match(contents,/node source\/scripts\/runpod-control-readonly-preflight\.mjs --read-only/);
+      assert.match(contents,/node --test source\/test\/runpod-control-readonly-preflight\.test\.mjs/);
+      assert.match(contents,/--proto '=https' --proto-redir '=https'/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|push|workflow_run|workflow_call|schedule|workflow_dispatch)\s*:/);
+      assert.doesNotMatch(contents,/\b[A-Za-z-]+\s*:\s*write\b|\bwrite-all\b/);
+      assert.doesNotMatch(contents,/\b(?:github\.token|GITHUB_TOKEN|GH_TOKEN|actions\/checkout)\b/);
+      assert.doesNotMatch(contents,/\b(?:podStop|podResume|podTerminate|podFindAndDeployOnDemand|start-pod|stop-pod)\b/);
+      continue;
+    }
     if(filename==='runpod-gpu-readonly-preflight.yml'){
       // One extra READ-ONLY Pod API preflight, manual and owner-approved.
       // Do not treat it as an ordinary public synthetic workflow: access
