@@ -50,3 +50,12 @@ jobs:
             exit 1
           fi
           node source/scripts/runpod-gpu-readonly-preflight.mjs --read-only
+      - name: Aggregated account billing READ ONLY - current UTC month
+        shell: bash
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -f source/scripts/runpod-gpu-billing-readonly.mjs
+          node --test source/test/runpod-gpu-billing-readonly.test.mjs
+          node source/scripts/runpod-gpu-billing-readonly.mjs --read-only-monthly
