@@ -717,3 +717,59 @@ test('R87 optimizer falls back to deep-sized chunks when max output budget const
  assert.equal(result.partitions.rawByteCoverageProven,true);
  assert.equal(result.partitions.originalDiffSha256,baseline.originalDiffSha256);
 });
+
+test('overshard PR: 1536-byte planning overflow is safely recovered by FULL budget-checked DEEP coverage',async()=>{
+  const longPrefix='src/'+('long-section/'.repeat(13));
+  const oversized=Buffer.from(Array.from({length:11},(_,i)=>
+    file(longPrefix+'module'+i+'.mjs',170)).join(''));
+  assert.ok(oversized.length<128*1024);
+  const full=plan(oversized);
+  assert.throws(()=>partitionRealSemanticDiff({plan:full,maxChunkBytes:1536}),
+    /SEMANTIC_SHARD_TOO_MANY/);
+  const routed=planAdaptiveSemanticShards({plan:full,maxOutputTokens:1024});
+  assert.equal(routed.mode,'DEEP');
+  assert.equal(routed.reason,'OVERSHARD_EXACT_FULL_COVERAGE');
+  assert.equal(routed.partitions.rawByteCoverageProven,true);
+  assert.equal(routed.partitions.originalByteCount,oversized.length);
+  assert.equal(routed.partitions.originalDiffSha256,sha(oversized));
+  assert.ok(routed.partitions.shardCount>0 && routed.partitions.shardCount<=96);
+  assert.equal(routed.partitions.changedFileCount,11);
+  const sourceAnchors=deriveAddedLinesFromDiff({diffBytes:oversized});
+  const seen={};
+  for(const chunk of routed.partitions.shards){
+    const a=deriveAddedLinesFromDiff({diffBytes:chunk.privateDiffBytes});
+    for(const [path,locations] of Object.entries(a))
+      (seen[path]??=[]).push(...locations);
+  }
+  assert.deepEqual(JSON.parse(JSON.stringify(seen)),
+    JSON.parse(JSON.stringify(sourceAnchors)));
+  const model=mockModel();
+  const result=await executeCompleteLocalSemanticReview({
+    plan:full,runId:RUN,fetchImpl:model.fetchImpl,maxOutputTokens:1024
+  });
+  assert.equal(model.count(),routed.partitions.shardCount);
+  assert.equal(result.processedShardCount,routed.partitions.shardCount);
+  assert.equal(result.originalDiffSha256,sha(oversized));
+  assert.equal(result.rawByteCoverageProven,true);
+  assert.equal(result.reviewMode,'DEEP');
+  assert.equal(result.approvalAuthorized,false);
+  assert.equal(result.independentReviewVerified,false);
+  assert.equal(result.provisionalState,'INCONCLUSIVE');
+  assert.equal(JSON.parse(JSON.stringify(result)).privateCanonicalReportBytes,'[REDACTED]');
+  assert.doesNotMatch(JSON.stringify(result),/changed_0_xxx/);
+});
+test('overshard PR: >96 irreducible file shards FAIL CLOSED before inference',async()=>{
+  const pathological=Buffer.from(Array.from({length:97},(_,i)=>
+    file('src/irreducible-file-'+i+'.mjs',1)).join(''));
+  const full=plan(pathological);
+  assert.equal(full.changedPaths.length,97);
+  assert.throws(()=>partitionRealSemanticDiff({plan:full,maxChunkBytes:1536}),
+    /SEMANTIC_SHARD_TOO_MANY/);
+  assert.throws(()=>planAdaptiveSemanticShards({plan:full}),
+    /SEMANTIC_SHARD_TOO_MANY/);
+  let invoked=0;
+  await assert.rejects(()=>executeCompleteLocalSemanticReview({
+    plan:full,runId:RUN,fetchImpl:async()=>{invoked++;throw Error('NOT_ALLOWED');}
+  }),/SEMANTIC_SHARD_TOO_MANY/);
+  assert.equal(invoked,0);
+});

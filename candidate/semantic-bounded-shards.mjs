@@ -153,8 +153,9 @@ export function partitionRealSemanticDiff({plan,maxChunkBytes=1536}={}){
    if(rebuilt!==file)deny('SEMANTIC_SHARD_LOSSY_RECONSTRUCTION');
    covered+=Buffer.byteLength(rebuilt,'utf8');
  }
- if(covered!==original.length||!shards.length||shards.length>96||
-   coveredLines===0)deny('SEMANTIC_SHARD_LOSSY_RECONSTRUCTION');
+ if(shards.length>96)deny('SEMANTIC_SHARD_TOO_MANY');
+ if(covered!==original.length||!shards.length||coveredLines===0)
+   deny('SEMANTIC_SHARD_LOSSY_RECONSTRUCTION');
  // Validate BOTH original/new line coordinates for every fragment before
  // launching a local Qwen request. Deleted-only chunks now remain reviewable.
  for(const shard of shards)
@@ -199,9 +200,17 @@ const SENSITIVE_REVIEW_PATH=/(?:^\.github\/|^devfactory\/(?:autonomy\/(?:lib\/|s
  * data, weakened review or partial native comment.
  */
 export function optimizeProtectedDeepPartitions({plan,maxOutputTokens=1024}={}){
- const original=partitionRealSemanticDiff({plan,maxChunkBytes:1536});
+ let original;
+ try{original=partitionRealSemanticDiff({plan,maxChunkBytes:1536});}
+ catch(error){
+   // A large but valid diff can exceed the 96-shard SMALL-chunk cap.
+   // NEVER discard source: search a larger fully reconstructed partition
+   // whose every request is independently context-checked before inference.
+   if(error?.message!=='SEMANTIC_SHARD_TOO_MANY')throw error;
+   original=null;
+ }
  const declarations=makeBoundedDiffDeclarationIndex({plan});
- const scope=original.originalDiffSha256;
+ const scope=original?.originalDiffSha256 ?? plan?.exactScope?.diffSha256;
  function preflight(part){
    const bytes=part.privateDiffBytes;
    const chunkPlan=prepareBoundedSemanticReview({
@@ -216,16 +225,17 @@ export function optimizeProtectedDeepPartitions({plan,maxOutputTokens=1024}={}){
  }
  // An old plan that cannot pass its own public request budget must not
  // be silently presented as a validated faster plan.
- for(const part of original.shards)preflight(part);
+ if(original)for(const part of original.shards)preflight(part);
  let best=original;
  for(const cap of [3072,2560,2304,2048,1792]){
    let candidate;
    try{candidate=partitionRealSemanticDiff({plan,maxChunkBytes:cap});}
    catch(error){
-     if(error?.message==='SEMANTIC_SHARD_LINE_TOO_LARGE')continue;
+     if(error?.message==='SEMANTIC_SHARD_LINE_TOO_LARGE'||
+        (original===null&&error?.message==='SEMANTIC_SHARD_TOO_MANY'))continue;
      throw error;
    }
-   if(candidate.shardCount>=best.shardCount)continue;
+   if(best&&candidate.shardCount>=best.shardCount)continue;
    const selected=[];
    let possible=true;
    for(const part of candidate.shards){
@@ -253,9 +263,12 @@ export function optimizeProtectedDeepPartitions({plan,maxOutputTokens=1024}={}){
        catch{possible=false;break;}
        selected.push(...smaller.shards);
      }
-     if(selected.length>=best.shardCount){possible=false;break;}
+     if(selected.length>96||(best&&selected.length>=best.shardCount)){
+       possible=false;break;
+     }
    }
-   if(!possible||selected.length>=best.shardCount||selected.length>96)
+   if(!possible||selected.length>96||
+      (best&&selected.length>=best.shardCount))
      continue;
    // Both levels were full-source reconstructed. The parent source order
    // is preserved and every child is an exact, full coverage subdivision.
@@ -273,11 +286,19 @@ export function optimizeProtectedDeepPartitions({plan,maxOutputTokens=1024}={}){
    });
    best=Object.freeze(safe);
  }
+ if(!best)deny('SEMANTIC_SHARD_TOO_MANY');
  return best;
 }
 
 export function planAdaptiveSemanticShards({plan,maxOutputTokens=1024}={}){
- const deep=partitionRealSemanticDiff({plan,maxChunkBytes:1536});
+ let deep;
+ try{deep=partitionRealSemanticDiff({plan,maxChunkBytes:1536});}
+ catch(error){
+   if(error?.message!=='SEMANTIC_SHARD_TOO_MANY')throw error;
+   const complete=optimizeProtectedDeepPartitions({plan,maxOutputTokens});
+   return Object.freeze({mode:'DEEP',geminiAdvisoryRecommended:true,
+     partitions:complete,reason:'OVERSHARD_EXACT_FULL_COVERAGE'});
+ }
  const paths=plan.changedPaths;
  const small=deep.originalByteCount<=12288 && paths.length<=4;
  const sensitive=paths.some(p=>SENSITIVE_REVIEW_PATH.test(p));

@@ -386,6 +386,9 @@ test('protected LIVE stage classifier leaks no secret or private paths',()=>{
  const timeout=classifyProtectedReviewFailure('LOCAL_MODEL',
    Error('LOCAL_MODEL_REQUEST_TIMEOUT'));
  assert.equal(timeout,'REAL_REVIEW_LOCAL_MODEL_LOCAL_MODEL_REQUEST_TIMEOUT');
+ const overLimit=classifyProtectedReviewFailure('LOCAL_MODEL',
+   Error('SEMANTIC_SHARD_TOO_MANY'));
+ assert.equal(overLimit,'REAL_REVIEW_LOCAL_MODEL_SEMANTIC_SHARD_TOO_MANY');
  const known=classifyProtectedReviewFailure('LOCAL_MODEL',
    Error('OLLAMA_COMPLETION_UNVERIFIED'));
  assert.equal(known,'REAL_REVIEW_LOCAL_MODEL_OLLAMA_COMPLETION_UNVERIFIED');
