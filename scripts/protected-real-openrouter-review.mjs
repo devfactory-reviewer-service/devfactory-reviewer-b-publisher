@@ -39,8 +39,10 @@ export function canRunProtectedOpenRouterReview(e){
 }
 export async function executeProtectedOpenRouterReview({
  env={},fetchImpl=globalThis.fetch,cloudFetchImpl=globalThis.fetch,
- now=Date.now()
+ now=Date.now(),clock=()=>Date.now()
 }={}){
+ if(typeof clock!=='function'||!Number.isSafeInteger(now))
+   return Object.freeze({ok:false,code:'CLOUD_CLOCK_INVALID'});
  if(!canRunProtectedOpenRouterReview(env))
     return Object.freeze({ok:false,code:'CLOUD_CONTEXT_OR_POLICY_DENIED'});
  if(typeof env.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM!=='string'||
@@ -102,7 +104,9 @@ export async function executeProtectedOpenRouterReview({
   const comment=prepareOpenRouterNativeComment({preflight,cloud,runId});
   // Refresh short-lived GitHub App credentials AFTER paid inference.
   stage='READ_REFRESH';
-  const refreshNow=now;
+  const refreshNow=clock();
+  if(!Number.isSafeInteger(refreshNow)||refreshNow<now)
+    deny('CLOUD_CLOCK_REFRESH_INVALID');
   const jwtAgain=createReviewerBAppJwt({privateKeyPem:pem,now:refreshNow});
   const readAgain=await createScopedReviewerBInstallationToken({
     appJwt:jwtAgain,purpose:'reviewRead',now:refreshNow,fetchImpl
@@ -111,10 +115,12 @@ export async function executeProtectedOpenRouterReview({
   await fetchAndVerifyOwnerCloudConsent({
     readToken:readAgain.token,prNumber:issuePr,
     headSha:preflight.target.headSha,
-    model:env.REVIEWER_B_OPENROUTER_MODEL,now,fetchImpl
+    model:env.REVIEWER_B_OPENROUTER_MODEL,now:refreshNow,fetchImpl
   });
   stage='WRITE';
-  const writerNow=now;
+  const writerNow=clock();
+  if(!Number.isSafeInteger(writerNow)||writerNow<refreshNow)
+    deny('CLOUD_CLOCK_WRITE_INVALID');
   const writeJwt=createReviewerBAppJwt({privateKeyPem:pem,now:writerNow});
   const write=await createScopedReviewerBInstallationToken({
    appJwt:writeJwt,purpose:'publish',now:writerNow,fetchImpl

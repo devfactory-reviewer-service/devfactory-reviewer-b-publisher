@@ -37,11 +37,11 @@ function reply(url,body,status=200,contentType='application/json'){
   body:new Response(JSON.stringify(body)).body};
 }
 function mockedNetwork({changedBody,failAt=0,refusal,modelOverride,
- keyOverrides={},catalogOverrides={}}={}){
+ keyOverrides={},keySequence=null,catalogOverrides={}}={}){
  const requests=[];
  const fetchImpl=async(url,options)=>{
   requests.push({url,method:options.method,body:options.body,headers:options.headers});
-  if(url===KEY)return reply(url,keyInfo(keyOverrides));
+  if(url===KEY)return reply(url,keyInfo(keySequence?.shift()??keyOverrides));
   if(url===ZDR)return reply(url,catalog(catalogOverrides));
   assert.equal(url,URL);
   assert.equal(options.method,'POST');
@@ -211,6 +211,29 @@ test('entire synthetic diff can be processed via real partitioned pipeline witho
  assert.equal(r.mayMerge,false);
  assert.equal(JSON.parse(r.privateCanonicalReportBytes.toString('utf8')).run_id,RUN);
 });
+test('expired read-only preflight refreshes once before synthetic paid shard',async()=>{
+ const net=mockedNetwork();
+ let ticks=0;
+ const r=await executeCompleteOpenRouterSemanticReview({
+  plan:makePlan(),runId:RUN,apiKey:K,
+  approvedThirdPartyPrivateEgress:true,authenticatedGlobalBudgetVerified:true,
+  fetchImpl:net.fetchImpl,clockMs:()=>ticks++===0?0:90_001
+ });
+ assert.equal(r.processedShardCount,1);
+ assert.equal(net.requests.filter(x=>x.url===KEY).length,2);
+ assert.equal(net.postCount(),1);
+});
+test('stale proof with exhausted monthly budget blocks before all paid shards',async()=>{
+ const net=mockedNetwork({keySequence:[{}, {limit_remaining:0.01}]});
+ let ticks=0;
+ await assert.rejects(()=>executeCompleteOpenRouterSemanticReview({
+  plan:makePlan(),runId:RUN,apiKey:K,
+  approvedThirdPartyPrivateEgress:true,authenticatedGlobalBudgetVerified:true,
+  fetchImpl:net.fetchImpl,clockMs:()=>ticks++===0?0:90_001
+ }),/OR_MONTHLY_KEY_BUDGET_NOT_PROVEN/);
+ assert.equal(net.postCount(),0);
+});
+
 test('full pipeline blocked before any paid call absent global budget',async()=>{
  const net=mockedNetwork();
  await assert.rejects(()=>executeCompleteOpenRouterSemanticReview({

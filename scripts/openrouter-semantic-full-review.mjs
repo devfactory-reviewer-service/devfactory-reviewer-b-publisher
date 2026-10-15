@@ -21,8 +21,9 @@ export async function executeCompleteOpenRouterSemanticReview({
  approvedThirdPartyPrivateEgress=false,
  authenticatedGlobalBudgetVerified=false,
  fetchImpl=globalThis.fetch,maxOutputTokens=1024,
- concurrency=3
+ concurrency=3,clockMs=()=>performance.now()
 }={}){
+ if(typeof clockMs!=='function')deny('OR_CLOCK_INVALID');
  if(!plan||typeof plan.privateDiffText!=='string'||
     !/^gh-[1-9][0-9]{0,18}-[1-9][0-9]{0,18}$/.test(runId||'')||
     !OPENROUTER_MODEL_IDS.includes(model)||
@@ -58,7 +59,9 @@ export async function executeCompleteOpenRouterSemanticReview({
    });
    return {bytes,chunkPlan,part};
  });
- const preflight=await preflightOpenRouterKey({apiKey,model,fetchImpl});
+ let preflight=await preflightOpenRouterKey({apiKey,model,fetchImpl});
+ let preflightIssuedAt=clockMs();
+ if(!Number.isFinite(preflightIssuedAt))deny('OR_CLOCK_INVALID');
  // Cost guard uses MAX price of allowlisted model and full conservative
  // 8192 input token envelope. No additional PRIVATE HTTP requests beyond
  // this one bounded exact original diff and its authenticated shards.
@@ -70,6 +73,28 @@ export async function executeCompleteOpenRouterSemanticReview({
  if(!(Number.isFinite(worstCase))||worstCase>MAX_ADVISORY_USD||
     preflight.remainingUsd<worstCase+0.05)
     deny('OR_FULL_REVIEW_BUDGET_NOT_PROVEN');
+ // Revalidate the READ-ONLY key budget and ZDR catalogue before a long
+ // review outlives its 120-second proof. Share one renewal across workers;
+ // NEVER retry a paid shard POST, and fail closed if funds or ZDR drift.
+ let refreshInFlight=null;
+ const currentKeyProof=async()=>{
+  const currentTime=clockMs();
+  if(!Number.isFinite(currentTime)||currentTime<preflightIssuedAt)
+    deny('OR_CLOCK_INVALID');
+  if(currentTime-preflightIssuedAt<90_000)return preflight;
+  if(!refreshInFlight){
+   refreshInFlight=(async()=>{
+    const renewed=await preflightOpenRouterKey({apiKey,model,fetchImpl});
+    if(renewed.remainingUsd<worstCase+0.05)
+      deny('OR_FULL_REVIEW_BUDGET_NOT_PROVEN');
+    preflight=renewed;
+    preflightIssuedAt=clockMs();
+    if(!Number.isFinite(preflightIssuedAt))deny('OR_CLOCK_INVALID');
+   })().finally(()=>{refreshInFlight=null});
+  }
+  await refreshInFlight;
+  return preflight;
+ };
  const findings=[],seen=new Set(),responses=Array(jobs.length);
  let nextIndex=0,failed=null,spentUsd=0;
  const results=Array(jobs.length);
@@ -80,9 +105,10 @@ export async function executeCompleteOpenRouterSemanticReview({
    if(index>=jobs.length)return;
    const job=jobs[index];
    try{
+    const freshPreflight=await currentKeyProof();
     const result=await executeOpenRouterShard({
       plan:job.chunkPlan,trustedDiffBytes:job.bytes,runId,
-      model,apiKey,preflight,approvedThirdPartyPrivateEgress,
+      model,apiKey,preflight:freshPreflight,approvedThirdPartyPrivateEgress,
       authenticatedGlobalBudgetVerified,fetchImpl,maxOutputTokens,
       trustedDeclarationIndex:declarations,
       trustedOriginalDiffSha256:parts.originalDiffSha256
