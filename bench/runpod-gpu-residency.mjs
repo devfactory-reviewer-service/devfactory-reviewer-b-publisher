@@ -4,11 +4,12 @@
  */
 const PS='http://127.0.0.1:11434/api/ps';
 const MODEL='qwen3.6:35b-a3b-coding';
+const GPU7B='qwen2.5-coder:7b';
 const deny=code=>{throw Error(code)};
 export async function verifyPublicGpuResidency({
  fetchImpl=globalThis.fetch,model=MODEL
 }={}){
- if(model!==MODEL||typeof fetchImpl!=='function')
+ if(![MODEL,GPU7B].includes(model)||typeof fetchImpl!=='function')
   deny('GPU_RESIDENCY_MODEL_UNTRUSTED');
  let r;
  try{
@@ -43,14 +44,17 @@ export async function verifyPublicGpuResidency({
  try{data=JSON.parse(raw)}catch{deny('GPU_RESIDENCY_RESPONSE_INVALID')}
  if(!Array.isArray(data?.models)||data.models.length>5)
   deny('GPU_RESIDENCY_RESPONSE_INVALID');
- const matches=data.models.filter(x=>x?.name===MODEL||x?.model===MODEL);
+ const matches=data.models.filter(x=>
+  (x?.name===model||x?.model===model)&&
+  (x.name===undefined||x.name===model)&&
+  (x.model===undefined||x.model===model));
  if(matches.length!==1)deny('GPU_RESIDENCY_MODEL_NOT_EXACT');
  const x=matches[0];
  if(!Number.isSafeInteger(x.size)||x.size<=0||
     !Number.isSafeInteger(x.size_vram)||x.size_vram<x.size)
   deny('GPU_RESIDENCY_CPU_OFFLOAD_OR_INVALID_METRIC');
  return Object.freeze({
-  model:MODEL,ollamaReportedFullyInVram:true,gpuResidencyVerified:true,
+  model,ollamaReportedFullyInVram:true,gpuResidencyVerified:true,
   privateSourceReviewed:false,approvalAuthorized:false,
   mayStartPod:false,mayPublishReview:false,mayMerge:false
  });
