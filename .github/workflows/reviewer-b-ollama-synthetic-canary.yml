@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   synthetic-local-ollama:
-    if: github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.event.pull_request.head.repo.full_name == github.repository && (contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark') || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen3') || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-7b') || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen35') || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen35-9b'))
+    if: github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.event.pull_request.head.repo.full_name == github.repository && (contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark') || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen3') || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-7b') || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen35') || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen35-9b') || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen35-9b-holdout'))
     name: Synthetic Ollama ${{ matrix.model }} - NO secrets or private code
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         # Third-model-only opt-in avoids rerunning already-failed 7B/14B.
-        include: ${{ fromJSON(contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-7b') && '[{"model":"qwen2.5-coder:7b","cli_arg":""}]' || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen3') && '[{"model":"qwen3:8b","cli_arg":"--qwen3-synthetic"}]' || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen35') && '[{"model":"qwen3.5:4b","cli_arg":"--qwen35-synthetic"}]' || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen35-9b') && '[{"model":"qwen3.5:9b","cli_arg":"--qwen35-9b-synthetic"}]' || '[{"model":"qwen2.5-coder:7b","cli_arg":""},{"model":"qwen2.5-coder:14b","cli_arg":"--large-synthetic"},{"model":"qwen3:8b","cli_arg":"--qwen3-synthetic"}]') }}
+        include: ${{ fromJSON(contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-7b') && '[{"model":"qwen2.5-coder:7b","cli_arg":""}]' || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen3') && '[{"model":"qwen3:8b","cli_arg":"--qwen3-synthetic"}]' || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen35') && '[{"model":"qwen3.5:4b","cli_arg":"--qwen35-synthetic"}]' || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen35-9b') && '[{"model":"qwen3.5:9b","cli_arg":"--qwen35-9b-synthetic"}]' || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen35-9b-holdout') && '[{"model":"qwen3.5:9b","cli_arg":"--qwen35-9b-holdout"}]' || '[{"model":"qwen2.5-coder:7b","cli_arg":""},{"model":"qwen2.5-coder:14b","cli_arg":"--large-synthetic"},{"model":"qwen3:8b","cli_arg":"--qwen3-synthetic"}]') }}
     steps:
       - name: Checkout exact PUBLIC PR HEAD without third-party actions
         shell: bash
@@ -92,6 +92,8 @@ jobs:
             node bench/ollama-synthetic-benchmark.mjs --qwen35-synthetic | tee "$RUNNER_TEMP/synthetic-report.json"
           elif [[ "$BENCHMARK_ARG" == '--qwen35-9b-synthetic' ]]; then
             node bench/ollama-synthetic-benchmark.mjs --qwen35-9b-synthetic | tee "$RUNNER_TEMP/synthetic-report.json"
+          elif [[ "$BENCHMARK_ARG" == '--qwen35-9b-holdout' ]]; then
+            node bench/ollama-synthetic-benchmark.mjs --qwen35-9b-holdout | tee "$RUNNER_TEMP/synthetic-report.json"
           else
             test -z "$BENCHMARK_ARG"
             node bench/ollama-synthetic-benchmark.mjs | tee "$RUNNER_TEMP/synthetic-report.json"
