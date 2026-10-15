@@ -32,6 +32,33 @@ test('no workflow has access to private App secrets, write token or privileged t
     // Permit exactly one root permissions mapping; reject ANY nested one.
     assert.equal((contents.match(/^permissions\s*:/gm)||[]).length,1);
     assert.doesNotMatch(contents,/^[ \t]+permissions\s*:/m);
+    if(filename==='runpod-control-stop-and-watchdog.yml'){
+      // The powerful CONTROL secret is accessible only in an owner-approved,
+      // exact protected main STOP-only workflow. No START, create or schedule.
+      assert.match(contents,/^on:\n  issue_comment:\n    types: \[created\]\n/m);
+      assert.match(contents,/^permissions: \{\}\n/m);
+      assert.match(contents,/environment:\s*runpod-gpu-control/g);
+      assert.equal((contents.match(/environment:\s*runpod-gpu-control/g)||[]).length,2);
+      assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/g);
+      assert.equal((contents.match(/github\.actor == 'devfactory-reviewer-service'/g)||[]).length,2);
+      assert.match(contents,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
+      assert.match(contents,/github\.ref == 'refs\/heads\/main'/);
+      assert.equal((contents.match(/github\.event\.issue\.number == 52/g)||[]).length,2);
+      assert.match(contents,/github\.event\.comment\.body == 'DEVFACTORY_RUNPOD_STOP_EXACT_R162'/);
+      assert.match(contents,/github\.event\.comment\.body == 'DEVFACTORY_RUNPOD_WATCHDOG_ARM_R163'/);
+      assert.match(contents,/cancel-in-progress: false/);
+      assert.match(contents,/sleep 1800/);
+      assert.equal((contents.match(/^      - name:/gm)||[]).length,5);
+      assert.equal((contents.match(/secrets\.RUNPOD_CONTROL_API_KEY/g)||[]).length,2);
+      assert.equal((contents.match(/node source\/scripts\/runpod-control-stop-exact-pod\.mjs --stop-exact/g)||[]).length,2);
+      assert.equal((contents.match(/node --test source\/test\/runpod-control-stop-exact-pod\.test\.mjs/g)||[]).length,2);
+      assert.match(contents,/--proto '=https' --proto-redir '=https'/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|push|workflow_run|workflow_call|schedule|workflow_dispatch)\s*:/);
+      assert.doesNotMatch(contents,/\b[A-Za-z-]+\s*:\s*write\b|\bwrite-all\b/);
+      assert.doesNotMatch(contents,/\b(?:github\.token|GITHUB_TOKEN|GH_TOKEN|actions\/checkout)\b/);
+      assert.doesNotMatch(contents,/\b(?:podResume|podFindAndDeployOnDemand|podTerminate|start-pod|resume-pod)\b/);
+      continue;
+    }
     if(filename==='runpod-control-readonly-scope-test.yml'){
       // CONTROL secret is extraordinarily sensitive, even in a GET-only
       // GraphQL query. Accept ONLY the exact owner-approved isolated lane.
