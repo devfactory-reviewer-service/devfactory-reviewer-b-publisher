@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { HOLDOUT_SEMANTIC_FIXTURES } from './ollama-holdout-fixtures.mjs';
 import { runFailOnlyStaticDiffAudit } from '../candidate/fail-only-static-audit.mjs';
 import { prepareBoundedSemanticReview } from '../candidate/semantic-review-request.mjs';
 import {
@@ -67,13 +68,17 @@ const FIXTURES=Object.freeze([
     before:'console.debug("entered validation");',source:null,deletionOnly:true,
     knownStaticBlocker:false,knownSemanticBug:false})
 ]);
+const HOLDOUT_FIXTURES=Object.freeze([FIXTURES[0],
+  ...HOLDOUT_SEMANTIC_FIXTURES.slice(0,3),FIXTURES[4],
+  ...HOLDOUT_SEMANTIC_FIXTURES.slice(3)]);
 // Fixed PUBLIC synthetic-only oracle; do not use it to score real private PRs.
 export function scoreFixedSyntheticOracle(label,explanation){
   if(typeof label!=='string'||typeof explanation!=='string'||explanation.length>65536)return false;
   // A statement that denies removal of an authorization guard cannot earn credit.
   if(label==='deleted authorization guard without replacement'&&
      /\b(?:no|not|never)\b.{0,75}\b(?:check|guard)\b.{0,25}\b(?:removed|deleted|bypassed)\b/i.test(explanation))return false;
-  const fixture=FIXTURES.find(f=>f.label===label);
+  const fixture=FIXTURES.find(f=>f.label===label)||
+    HOLDOUT_FIXTURES.find(f=>f.label===label);
   return Boolean(fixture?.knownSemanticBug&&fixture.oraclePattern.test(explanation));
 }
 function deny(code){throw Error(code);}
@@ -170,11 +175,13 @@ async function boundedJson(response) {
  * Uses existing fail-closed review modules; NEVER grants independence or PASS.
  */
 export async function runSyntheticLocalOllamaBenchmark({
-  fetchImpl=fetch,model='qwen2.5-coder:7b'
+  fetchImpl=fetch,model='qwen2.5-coder:7b',fixtureSet='reference'
 }={}) {
   if(typeof fetchImpl!=='function')deny('OLLAMA_BENCHMARK_FETCH_MISSING');
+  if(!['reference','holdout'].includes(fixtureSet))deny('OLLAMA_BENCHMARK_UNSUPPORTED_FIXTURES');
+  const fixtures=fixtureSet==='holdout'?HOLDOUT_FIXTURES:FIXTURES;
   const cases=[];
-  for(const fixture of FIXTURES){
+  for(const fixture of fixtures){
     const bytes=diff(fixture);
     const plan=planFor(bytes);
     const candidate=prepareOfflineOllamaCandidate({
@@ -247,6 +254,7 @@ export async function runSyntheticLocalOllamaBenchmark({
     qualityGate:quality,
     syntheticQualityGatePassed:quality.syntheticQualityGatePassed,
     testsCompleted:cases.length,model,
+    ...(fixtureSet==='holdout'?{fixtureSet:'holdout'}:{}),
     seededSemanticBugs:semanticBugCases.length,
     seededSemanticBugsDetected:semanticBugCases.filter(c=>c.semanticOracleHit).length,
     cleanFixtures:cleanCases.length,
@@ -266,7 +274,7 @@ if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
   try {
     if(process.argv.length>3 ||
       (process.argv[2] &&
-        !['--small-synthetic','--large-synthetic','--qwen3-synthetic','--qwen35-synthetic','--qwen35-9b-synthetic','--coder-30b-synthetic'].includes(process.argv[2])))
+        !['--small-synthetic','--large-synthetic','--qwen3-synthetic','--qwen35-synthetic','--qwen35-9b-synthetic','--qwen35-9b-holdout','--coder-30b-synthetic'].includes(process.argv[2])))
       deny('OLLAMA_BENCHMARK_UNSUPPORTED_ARGUMENT');
     const model=process.argv[2]==='--small-synthetic'?
       'qwen2.5-coder:1.5b':
@@ -274,9 +282,10 @@ if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
       'qwen2.5-coder:14b':
       process.argv[2]==='--qwen3-synthetic'? 'qwen3:8b':
       process.argv[2]==='--qwen35-synthetic'? 'qwen3.5:4b':
-      process.argv[2]==='--qwen35-9b-synthetic'? 'qwen3.5:9b':
+      ['--qwen35-9b-synthetic','--qwen35-9b-holdout'].includes(process.argv[2])? 'qwen3.5:9b':
       process.argv[2]==='--coder-30b-synthetic'? 'qwen3-coder:30b':'qwen2.5-coder:7b';
-    const summary=await runSyntheticLocalOllamaBenchmark({model});
+    const summary=await runSyntheticLocalOllamaBenchmark({model,
+      fixtureSet:process.argv[2]==='--qwen35-9b-holdout'?'holdout':'reference'});
     process.stdout.write(JSON.stringify(summary)+'\n');
   }catch(error){
     process.stderr.write('LOCAL_SYNTHETIC_BENCHMARK_BLOCKED:'+safeBenchmarkErrorCode(error)+'\n');
