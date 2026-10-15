@@ -306,7 +306,29 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.doesNotMatch(contents,/\b(?:id-token|pull-requests|contents)\s*:\s*write\b/);
       continue;
     }
-    assert.match(contents,/permissions:\s*\n\s*contents:\s*read\b/);
+    if(filename==='reviewer-b-private-openrouter.yml'){
+      // Exact protected service-owned CLOUD lane; public PR tests never
+      // run inference, retrieve secrets, read private code, or publish.
+      // Owner model/HEAD/month consent and protected policy secret are required.
+      assert.match(contents,/^permissions: \{\}\n/m);
+      assert.match(contents,/^on:\n  workflow_dispatch:\n/m);
+      assert.match(contents,/environment:\s*reviewer-b-publish/);
+      assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/);
+      assert.match(contents,/github\.ref == 'refs\/heads\/main'/);
+      assert.match(contents,/github\.event_name == 'workflow_dispatch'/);
+      assert.match(contents,/^  group: reviewer-b-protected-real-semantic-manual$/m);
+      assert.equal((contents.match(/secrets\./g)||[]).length,3);
+      assert.match(contents,/secrets\.REVIEWER_B_OPENROUTER_API_KEY/);
+      assert.match(contents,/secrets\.REVIEWER_B_CLOUD_POLICY_READY/);
+      assert.match(contents,/secrets\.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM/);
+      assert.match(contents,/node scripts\/protected-real-openrouter-review\.mjs/);
+      assert.match(contents,/--proto '=https' --proto-redir '=https'/);
+      assert.match(contents,/--max-time 45 --max-filesize 8388608/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|push|schedule)\s*:/);
+      assert.doesNotMatch(contents,/\b(?:actions\/checkout|GH_TOKEN|GITHUB_TOKEN|id-token|attestations)\b/);
+      assert.doesNotMatch(contents,/\b(?:contents|pull-requests|issues|actions|checks)\s*:\s*write\b/);
+      continue;
+    }    assert.match(contents,/permissions:\s*\n\s*contents:\s*read\b/);
     assert.doesNotMatch(contents,/\bpull_request_target\s*:/);
     assert.doesNotMatch(contents,/\bworkflow_run\s*:/);
     assert.doesNotMatch(contents,/\bworkflow_call\s*:/);

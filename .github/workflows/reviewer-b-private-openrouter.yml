@@ -1,0 +1,73 @@
+name: Reviewer B - protected PRIVATE OpenRouter ZDR Qwen review
+
+# DORMANT UNTIL POLICY_READY protected secret + owner exact-head consent.
+# No pull_request/PR-code checkout; no autonomous or duplicate Reviewer B.
+# Native publication remains COMMENTED only, never APPROVE or merge.
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Exact private PR number with no existing Reviewer B review'
+        required: true
+        type: string
+      expected_head:
+        description: 'Exact immutable 40-digit private PR HEAD'
+        required: true
+        type: string
+      model:
+        description: 'Exact OpenRouter Qwen ID'
+        required: true
+        type: choice
+        options:
+          - qwen/qwen3-coder-30b-a3b-instruct
+          - qwen/qwen3.6-35b-a3b
+
+permissions: {}
+
+# Same repo-wide concurrency group as the EXISTING local Reviewer B.
+concurrency:
+  group: reviewer-b-protected-real-semantic-manual
+  cancel-in-progress: false
+
+jobs:
+  protected-private-openrouter-review:
+    name: OpenRouter ZDR exact private diff - native COMMENTED only
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'workflow_dispatch' }}
+    environment: reviewer-b-publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Fetch exact protected PUBLIC publisher source (no untrusted checkout)
+        shell: bash
+        env:
+          PUB_REPO: ${{ github.repository }}
+          PUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$PUB_REPO" = 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher'
+          [[ "$PUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          mkdir source
+          curl --fail --silent --show-error --location --retry 2 \
+            --proto '=https' --proto-redir '=https' \
+            --max-time 45 --max-filesize 8388608 \
+            --header 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/$PUB_REPO/tarball/$PUB_SHA" \
+            --output "$RUNNER_TEMP/publisher-openrouter.tar.gz"
+          tar -xzf "$RUNNER_TEMP/publisher-openrouter.tar.gz" \
+            -C source --strip-components=1
+          test -f source/scripts/protected-real-openrouter-review.mjs
+          test -f source/scripts/openrouter-owner-consent.mjs
+      - name: Protected exact-head owner-consented cloud analysis
+        shell: bash
+        env:
+          REVIEWER_B_TARGET_PR: ${{ inputs.pr_number }}
+          REVIEWER_B_EXPECTED_HEAD: ${{ inputs.expected_head }}
+          REVIEWER_B_OPENROUTER_MODEL: ${{ inputs.model }}
+          REVIEWER_B_CLOUD_TARGET_REPOSITORY: deenkids7-dev/deenkids
+          REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM: ${{ secrets.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM }}
+          REVIEWER_B_OPENROUTER_API_KEY: ${{ secrets.REVIEWER_B_OPENROUTER_API_KEY }}
+          REVIEWER_B_CLOUD_POLICY_READY: ${{ secrets.REVIEWER_B_CLOUD_POLICY_READY }}
+        run: |
+          set -euo pipefail
+          cd source
+          node scripts/protected-real-openrouter-review.mjs

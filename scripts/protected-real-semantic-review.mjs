@@ -249,15 +249,19 @@ async function readJson(response){
  try{return JSON.parse(raw);}catch{deny('NATIVE_REPLY_BAD_JSON');}
 }
 export async function publishRealSemanticComment({plan,readToken,writeToken,
- approvedProtectedPublication=false,fetchImpl=globalThis.fetch}={}){
- if(approvedProtectedPublication!==true||
-   plan?.evidenceClass!=='NATIVE_SEMANTIC_COMMENT_ONLY'||
+ approvedProtectedPublication=false,approvedCloudCommentPublication=false,
+ fetchImpl=globalThis.fetch}={}){
+ const localEvidence=plan?.evidenceClass==='NATIVE_SEMANTIC_COMMENT_ONLY'&&
+    plan?.body?.startsWith('<!-- devfactory-reviewer-b-semantic-comment:v1:');
+ const cloudEvidence=approvedCloudCommentPublication===true&&
+    plan?.evidenceClass==='NATIVE_OPENROUTER_ZDR_COMMENT_ONLY'&&
+    plan?.body?.startsWith('<!-- devfactory-reviewer-b-openrouter-comment:v1:');
+ if(approvedProtectedPublication!==true||(!localEvidence&&!cloudEvidence)||
    plan.event!=='COMMENT'||plan.approvalAuthorized!==false||
    plan.independentReviewVerified!==false||
    !Number.isSafeInteger(plan.prNumber)||plan.prNumber<1||
    typeof plan.headSha!=='string'||!SHA40.test(plan.headSha)||
-   typeof plan.body!=='string'||!plan.body.startsWith(
-     '<!-- devfactory-reviewer-b-semantic-comment:v1:')||
+   typeof plan.body!=='string'||
    plan.body.length>12000)deny('SEMANTIC_PUBLISH_DENIED');
  if(typeof fetchImpl!=='function'||typeof readToken!=='string'||
    typeof writeToken!=='string'||readToken.length<15||writeToken.length<15||
