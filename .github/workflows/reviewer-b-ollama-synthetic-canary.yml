@@ -101,6 +101,10 @@ jobs:
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const r=JSON.parse(readFileSync(process.argv[1],"utf8"));
+            const holdout=process.argv[3]==="--qwen35-9b-holdout";
+            if((holdout && r.fixtureSet!=="holdout") ||
+               (!holdout && r.fixtureSet!==undefined))
+              throw Error("SYNTHETIC_FIXTURE_SET_MISMATCH");
             if(r.syntheticQualityGatePassed===false)
               throw Error("MODEL_QUALITY_GATE_FAILED_NOT_PRODUCTION_READY");
             if(r.benchmark!=="synthetic-local-ollama-v2" ||
@@ -116,4 +120,4 @@ jobs:
             process.stdout.write("SYNTHETIC_MODEL_EXECUTION_VERIFIED_NOT_INDEPENDENT_REVIEW\n");
             if(!r.syntheticQualityGatePassed)
               throw Error("MODEL_QUALITY_GATE_FAILED_NOT_PRODUCTION_READY");
-          ' "$RUNNER_TEMP/synthetic-report.json" "$BENCHMARK_MODEL"
+          ' "$RUNNER_TEMP/synthetic-report.json" "$BENCHMARK_MODEL" "$BENCHMARK_ARG"
