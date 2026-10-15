@@ -301,13 +301,29 @@ export async function runSyntheticLocalOllamaBenchmark({
     approvalAuthorized:false,publishEvent:null
   });
 }
+/**
+ * Keep the optional fixed PUBLIC GPU modes distinct. The previous 7B mode
+ * was accidentally selected as Qwen 35B by the CLI ternary.
+ * Pure selector: no fetch, no shell, no GPU spending or private diff.
+ */
+export function resolveRunPodGpuSyntheticSelector(flag){
+ if(flag==='--runpod-7b-holdout')
+  return Object.freeze({model:'qwen2.5-coder:7b',fixtureSet:'holdout'});
+ if(flag==='--runpod-35b-holdout')
+  return Object.freeze({model:'qwen3.6:35b-a3b-coding',fixtureSet:'holdout'});
+ if(flag==='--runpod-35b-synthetic')
+  return Object.freeze({model:'qwen3.6:35b-a3b-coding',fixtureSet:'reference'});
+ return null;
+}
+
 // This explicit, operator-run CLI only outputs aggregate synthetic metrics.
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
   try {
     if(process.argv.length>3 ||
       (process.argv[2] &&
-        !['--small-synthetic','--large-synthetic','--qwen3-synthetic','--qwen35-synthetic','--qwen35-9b-synthetic','--qwen35-9b-holdout','--coder-30b-synthetic','--runpod-35b-synthetic','--runpod-35b-holdout'].includes(process.argv[2])))
+        !['--small-synthetic','--large-synthetic','--qwen3-synthetic','--qwen35-synthetic','--qwen35-9b-synthetic','--qwen35-9b-holdout','--coder-30b-synthetic','--runpod-35b-synthetic','--runpod-35b-holdout','--runpod-7b-holdout'].includes(process.argv[2])))
       deny('OLLAMA_BENCHMARK_UNSUPPORTED_ARGUMENT');
+    const gpuSelection=resolveRunPodGpuSyntheticSelector(process.argv[2]);
     const model=process.argv[2]==='--small-synthetic'?
       'qwen2.5-coder:1.5b':
       process.argv[2]==='--large-synthetic'?
@@ -316,9 +332,10 @@ if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
       process.argv[2]==='--qwen35-synthetic'? 'qwen3.5:4b':
       ['--qwen35-9b-synthetic','--qwen35-9b-holdout'].includes(process.argv[2])? 'qwen3.5:9b':
       process.argv[2]==='--coder-30b-synthetic'? 'qwen3-coder:30b':
-      ['--runpod-35b-synthetic','--runpod-35b-holdout'].includes(process.argv[2])? 'qwen3.6:35b-a3b-coding':'qwen2.5-coder:7b';
+      gpuSelection?.model ?? 'qwen2.5-coder:7b';
     const summary=await runSyntheticLocalOllamaBenchmark({model,
-      fixtureSet:['--qwen35-9b-holdout','--runpod-35b-holdout'].includes(process.argv[2])?'holdout':'reference'});
+      fixtureSet:gpuSelection?.fixtureSet ??
+       (process.argv[2]==='--qwen35-9b-holdout'?'holdout':'reference')});
     process.stdout.write(JSON.stringify(summary)+'\n');
   }catch(error){
     process.stderr.write('LOCAL_SYNTHETIC_BENCHMARK_BLOCKED:'+safeBenchmarkErrorCode(error)+'\n');
