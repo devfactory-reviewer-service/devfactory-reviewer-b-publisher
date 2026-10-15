@@ -1,0 +1,61 @@
+name: RunPod CONTROL - single bounded GPU START with independent STOP proof
+
+# Never issue a Pod START unless protected main has a freshly running
+# separately approved watchdog and authenticated current-month budget proof.
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  bounded-gpu-lease:
+    name: Single exact Pod 24min lease and guaranteed best-effort STOP
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'issue_comment' && github.event.action == 'created' && github.event.issue.number == 52 && !github.event.issue.pull_request && github.event.comment.body == 'DEVFACTORY_RUNPOD_START_24MIN_R164' }}
+    concurrency:
+      group: reviewer-b-runpod-one-bounded-start
+      cancel-in-progress: false
+    environment: runpod-gpu-control
+    runs-on: ubuntu-24.04
+    timeout-minutes: 33
+    steps:
+      - name: Verify exact protected publisher main source and offline tests
+        shell: bash
+        env:
+          PUBLISHER_REPO: ${{ github.repository }}
+          PUBLISHER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$PUBLISHER_REPO" = 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher'
+          [[ "$PUBLISHER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          mkdir -p source
+          curl --fail --silent --show-error --location --retry 2 \
+            --proto '=https' --proto-redir '=https' --max-time 45 --max-filesize 8388608 \
+            "https://api.github.com/repos/${PUBLISHER_REPO}/tarball/${PUBLISHER_SHA}" \
+            --output "$RUNNER_TEMP/bounded-start-publisher.tar.gz"
+          tar -xzf "$RUNNER_TEMP/bounded-start-publisher.tar.gz" -C source --strip-components=1
+          node --test source/test/runpod-control-bounded-start.test.mjs
+          node --test source/test/runpod-control-stop-exact-pod.test.mjs
+      - name: Require active independent watchdog plus fresh budget then start exact Pod
+        shell: bash
+        env:
+          RUNPOD_CONTROL_API_KEY: ${{ secrets.RUNPOD_CONTROL_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${RUNPOD_CONTROL_API_KEY:-}"
+          node source/scripts/runpod-control-bounded-start.mjs --start-exact-bounded
+      - name: Bound expensive GPU lease to 24 minutes
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 1440
+      - name: Best effort immediate provider STOP even after errors
+        if: ${{ always() }}
+        shell: bash
+        env:
+          RUNPOD_CONTROL_API_KEY: ${{ secrets.RUNPOD_CONTROL_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -f source/scripts/runpod-control-stop-exact-pod.mjs
+          test -n "${RUNPOD_CONTROL_API_KEY:-}"
+          node source/scripts/runpod-control-stop-exact-pod.mjs --stop-exact
