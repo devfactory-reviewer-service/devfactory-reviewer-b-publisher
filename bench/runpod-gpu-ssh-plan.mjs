@@ -9,6 +9,7 @@ import {planBoundedRunPodGpuTest} from './runpod-gpu-budget.mjs';
 
 const POD='ao1z73um41h61i';
 const MODEL='qwen3.6:35b-a3b-coding';
+const GPU7B='qwen2.5-coder:7b';
 const reject=reason=>Object.freeze({
   ok:false,reason,canReviewPrivateCode:false,mayStartPod:false,
   mayMerge:false,mayPublishReview:false
@@ -27,7 +28,7 @@ export function planPinnedSyntheticSshTunnel({
   budgetQuote,model=MODEL,
   externalProviderStopProof=false,providerPortExposureVerified=false,
 }={}){
-  if(podId!==POD||model!==MODEL)return reject('GPU_POD_OR_MODEL_IDENTITY_UNVERIFIED');
+  if(podId!==POD||![MODEL,GPU7B].includes(model))return reject('GPU_POD_OR_MODEL_IDENTITY_UNVERIFIED');
   if(!hostValid(host)||!Number.isSafeInteger(port)||port<1||port>65535)
     return reject('GPU_PINNED_SSH_ENDPOINT_MISSING');
   if(!absoluteFile(sshPrivateKeyPath)||!absoluteFile(knownHostsPath)||
@@ -70,7 +71,8 @@ export function planPinnedSyntheticSshTunnel({
     localEndpoint:'http://127.0.0.1:11434',
     plannedMinutes:budget.proposedMinutes,
     projectedMonthlySpendEur:budget.projectedMonthlySpendEur,
-    benchmarkArgs:Object.freeze(['bench/ollama-synthetic-benchmark.mjs','--runpod-35b-holdout']),
+    benchmarkArgs:Object.freeze(['bench/ollama-synthetic-benchmark.mjs',
+      model===GPU7B?'--runpod-7b-holdout':'--runpod-35b-holdout']),
     benchmarkContainsOnlyPublicSyntheticFixtures:true,
     remoteGitHubPrivateKeyNeverForwarded:true,
     canReviewPrivateCode:false,mayStartPod:false,
