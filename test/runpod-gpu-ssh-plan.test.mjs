@@ -41,7 +41,7 @@ test('no quote, unverified host, or missing independent stop prevents bridge',()
  const invalid=[
  {podId:'foreign'},
  {podId:'65d120da1098'}, // never reuse old Pod identity
- {model:'qwen2.5-coder:7b'},
+ {model:'qwen3.5:9b'},
  {host:'localhost'},
  {host:'127.0.0.1'},
  {host:'a;$(touch /tmp/attack)'},
