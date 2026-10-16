@@ -111,6 +111,7 @@ test('protected cloud run never active from draft, PR event or missing policy',(
   REVIEWER_B_TARGET_PR:String(PR),REVIEWER_B_EXPECTED_HEAD:HEAD,
   REVIEWER_B_OPENROUTER_MODEL:MODEL,
   REVIEWER_B_CLOUD_POLICY_READY:'approved-protected-v1',
+  REVIEWER_B_CLOUD_REQUEST_VERIFIED:'true',
   REVIEWER_B_CLOUD_TARGET_REPOSITORY:'deenkids7-dev/deenkids'
  };
  assert.equal(canRunProtectedOpenRouterReview(base),true);
@@ -118,6 +119,8 @@ test('protected cloud run never active from draft, PR event or missing policy',(
   {GITHUB_REF:'refs/heads/feature'},
   {GITHUB_EVENT_NAME:'pull_request'},
   {REVIEWER_B_CLOUD_POLICY_READY:undefined},
+  {REVIEWER_B_CLOUD_REQUEST_VERIFIED:undefined},
+  {REVIEWER_B_CLOUD_REQUEST_VERIFIED:'false'},
   {GITHUB_ACTOR:'deenkids7-dev'},
   {REVIEWER_B_EXPECTED_HEAD:'f'.repeat(39)},
   {REVIEWER_B_OPENROUTER_MODEL:'openrouter/auto'},

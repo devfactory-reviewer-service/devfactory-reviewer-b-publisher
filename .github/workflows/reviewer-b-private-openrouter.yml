@@ -1,6 +1,8 @@
 name: Reviewer B - protected PRIVATE OpenRouter ZDR Qwen review
 
 # DORMANT UNTIL POLICY_READY protected secret + owner exact-head consent.
+# Either reviewed dispatch or authenticated service comment on PUBLIC Publisher #62.
+# Separate #62 from LOCAL Qwen queue #21 to prevent duplicate model starts.
 # No pull_request/PR-code checkout; no autonomous or duplicate Reviewer B.
 # Native publication remains COMMENTED only, never APPROVE or merge.
 on:
@@ -21,6 +23,8 @@ on:
         options:
           - qwen/qwen3-coder-30b-a3b-instruct
           - qwen/qwen3.6-35b-a3b
+  issue_comment:
+    types: [created]
 
 permissions: {}
 
@@ -32,7 +36,7 @@ concurrency:
 jobs:
   protected-private-openrouter-review:
     name: OpenRouter ZDR exact private diff - native COMMENTED only
-    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.action == 'created' && github.event.issue.number == 62 && !github.event.issue.pull_request)) }}
     environment: reviewer-b-publish
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -57,12 +61,24 @@ jobs:
             -C source --strip-components=1
           test -f source/scripts/protected-real-openrouter-review.mjs
           test -f source/scripts/openrouter-owner-consent.mjs
+          test -f source/scripts/protected-openrouter-review-request.mjs
+      - name: Verify exact service-owned cloud request BEFORE PRIVATE credentials
+        id: cloud_request
+        shell: bash
+        env:
+          REVIEWER_B_DISPATCH_PR: ${{ inputs.pr_number }}
+          REVIEWER_B_DISPATCH_HEAD: ${{ inputs.expected_head }}
+          REVIEWER_B_DISPATCH_MODEL: ${{ inputs.model }}
+        run: |
+          set -euo pipefail
+          node source/scripts/protected-openrouter-review-request.mjs
       - name: Protected exact-head owner-consented cloud analysis
         shell: bash
         env:
-          REVIEWER_B_TARGET_PR: ${{ inputs.pr_number }}
-          REVIEWER_B_EXPECTED_HEAD: ${{ inputs.expected_head }}
-          REVIEWER_B_OPENROUTER_MODEL: ${{ inputs.model }}
+          REVIEWER_B_TARGET_PR: ${{ steps.cloud_request.outputs.pr_number }}
+          REVIEWER_B_EXPECTED_HEAD: ${{ steps.cloud_request.outputs.expected_head }}
+          REVIEWER_B_OPENROUTER_MODEL: ${{ steps.cloud_request.outputs.model }}
+          REVIEWER_B_CLOUD_REQUEST_VERIFIED: ${{ steps.cloud_request.outputs.verified }}
           REVIEWER_B_CLOUD_TARGET_REPOSITORY: deenkids7-dev/deenkids
           REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM: ${{ secrets.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM }}
           REVIEWER_B_OPENROUTER_API_KEY: ${{ secrets.REVIEWER_B_OPENROUTER_API_KEY }}

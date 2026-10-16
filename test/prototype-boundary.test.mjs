@@ -316,6 +316,14 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/);
       assert.match(contents,/github\.ref == 'refs\/heads\/main'/);
       assert.match(contents,/github\.event_name == 'workflow_dispatch'/);
+      assert.match(contents,/issue_comment:\n    types: \[created\]/);
+      assert.match(contents,/github\.event\.issue\.number == 62/);
+      assert.match(contents,/!github\.event\.issue\.pull_request/);
+      assert.doesNotMatch(contents,/github\.event\.issue\.number == 21/);
+      assert.match(contents,/node source\/scripts\/protected-openrouter-review-request\.mjs/);
+      assert.match(contents,/REVIEWER_B_CLOUD_REQUEST_VERIFIED: \$\{\{ steps\.cloud_request\.outputs\.verified \}\}/);
+      assert.ok(contents.indexOf('node source/scripts/protected-openrouter-review-request.mjs')<
+        contents.indexOf('node scripts/protected-real-openrouter-review.mjs'));
       assert.match(contents,/^  group: reviewer-b-protected-real-semantic-manual$/m);
       assert.equal((contents.match(/secrets\./g)||[]).length,3);
       assert.match(contents,/secrets\.REVIEWER_B_OPENROUTER_API_KEY/);

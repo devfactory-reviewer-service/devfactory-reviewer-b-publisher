@@ -30,7 +30,8 @@ const deny=c=>{throw Error(c)};
 export function canRunProtectedOpenRouterReview(e){
  return approvedReadOnlyExecutionContext(e)&&
    e.GITHUB_WORKFLOW_REF===WORKFLOW&&
-   e.GITHUB_EVENT_NAME==='workflow_dispatch'&&
+   (e.GITHUB_EVENT_NAME==='workflow_dispatch'||e.GITHUB_EVENT_NAME==='issue_comment')&&
+   e.REVIEWER_B_CLOUD_REQUEST_VERIFIED==='true'&&
    typeof e.REVIEWER_B_EXPECTED_HEAD==='string'&&
    SHA40.test(e.REVIEWER_B_EXPECTED_HEAD)&&
    OPENROUTER_MODEL_IDS.includes(e.REVIEWER_B_OPENROUTER_MODEL)&&
